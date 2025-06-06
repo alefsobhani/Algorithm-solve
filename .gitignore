@@ -1,26 +1,29 @@
-# Dependency directories
+# Node dependencies
 node_modules/
 client/node_modules/
 server/node_modules/
 
-# Environment variables
+# Environment files
 .env
 client/.env
 server/.env
 
 # Build output
-build/
 dist/
-client/build/
+build/
 client/dist/
-server/build/
+client/build/
 server/dist/
+server/build/
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Misc
+# OS and editor files
 .DS_Store
 .cache/
+
+# Coverage
+coverage/
