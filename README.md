@@ -5,9 +5,12 @@ This repository contains a simple task management web application built with **N
 ## Features
 - User authentication with JWT
 - Password reset via email
-- Task CRUD operations
+- Task CRUD operations with due dates, priorities and statuses
 - Role based access (admin, user)
 - Comment on tasks and tag users
+- Filter and sort tasks by priority, status and due date
+- Inline status updates and comment threads
+- Progress indicator for completed tasks
 - Responsive frontend with React
 
 ## Getting Started
