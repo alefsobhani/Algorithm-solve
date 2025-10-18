@@ -36,49 +36,61 @@
 <!-- /polish styles -->
 
 
-<!-- injected early: localStorage per-day shim -->
+<!-- per-day storage helpers -->
 <script>
 (function(){
   const STORAGE_NS = 'quickslots_v11';
-  const dayKey = (iso) => `${STORAGE_NS}:day:${iso}`;
+  const STORAGE_PREFIX = `${STORAGE_NS}:day:`;
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
 
   function isoToday(){ return new Date().toISOString().slice(0,10); }
+  function normalizeISO(iso){ return ISO_RE.test(iso) ? iso : isoToday(); }
   function currentISO() {
     const el = document.getElementById('dayDate') || document.querySelector('input[type="date"].dayDate');
-    if (el && el.value) return el.value;
+    if (el && ISO_RE.test(el.value)) return el.value;
     try {
       const last = localStorage.getItem('lastDate');
-      if (last && /^\d{4}-\d{2}-\d{2}$/.test(last)) return last;
+      if (last && ISO_RE.test(last)) return last;
     } catch(e) {}
     return isoToday();
   }
-
-  // One-time migration
-  try {
-    const legacy = localStorage.getItem(STORAGE_NS);
-    if (legacy && !localStorage.getItem(dayKey(currentISO()))) {
-      localStorage.setItem(dayKey(currentISO()), legacy);
-    }
-    if (legacy) localStorage.removeItem(STORAGE_NS);
-  } catch (e) {}
-
-  const __orig_get = localStorage.getItem.bind(localStorage);
-  const __orig_set = localStorage.setItem.bind(localStorage);
-  const __orig_del = localStorage.removeItem.bind(localStorage);
-
-  function mapKey(k){
-    if (k === STORAGE_NS) return dayKey(currentISO());
-    return k;
+  function dayKey(iso){
+    return `${STORAGE_PREFIX}${normalizeISO(iso)}`;
   }
 
-  localStorage.getItem = function(k){ return __orig_get(mapKey(k)); };
-  localStorage.setItem = function(k,v){ return __orig_set(mapKey(k), v); };
-  localStorage.removeItem = function(k){ return __orig_del(mapKey(k)); };
+  function migrateLegacy(){
+    try {
+      const legacyRaw = localStorage.getItem(STORAGE_NS);
+      if (!legacyRaw) return;
+      let parsed = null;
+      try { parsed = JSON.parse(legacyRaw); }
+      catch(e){ parsed = null; }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)){
+        Object.entries(parsed).forEach(([iso,val])=>{
+          if (!ISO_RE.test(iso)) return;
+          try {
+            if (!localStorage.getItem(dayKey(iso))) {
+              localStorage.setItem(dayKey(iso), JSON.stringify(val));
+            }
+          } catch(e){}
+        });
+      } else {
+        const iso = currentISO();
+        try {
+          if (!localStorage.getItem(dayKey(iso))) {
+            localStorage.setItem(dayKey(iso), legacyRaw);
+          }
+        } catch(e){}
+      }
+      localStorage.removeItem(STORAGE_NS);
+    } catch(e){}
+  }
 
-  window.__perDayShim = { STORAGE_NS, dayKey, currentISO };
+  migrateLegacy();
+  window.__perDayShim = { STORAGE_NS, STORAGE_PREFIX, dayKey, currentISO };
 })();
 </script>
-<!-- /injected early -->
+<!-- /per-day storage helpers -->
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -410,7 +422,7 @@ input[type="date"]::-moz-focus-inner{ border:0; }
 
       <div class="toolbar" style="margin-bottom:10px">
         <div class="field">
-          <label class="pill">شروع</label><input id="startHM" type="time" value="09:00">
+          <label class="pill">شروع</label><input id="startHM" type="time" step="1" value="09:00:00">
         </div>
         <div class="field">
           <label class="pill">بلوک‌ها</label><input id="blocks" type="number" min="1" value="4" style="width:80px">
@@ -486,8 +498,101 @@ const hmsToMin=hms=>{
 };
 const minToHM=m=>`${pad(Math.floor(m/60))}:${pad(m%60)}`;
 const minToHMS=m=>`${pad(Math.floor(m/60))}:${pad(m%60)}:00`;
-const addMinHM=(hm,m)=>{ const [h,mi]=hm.split(':').map(Number); const t=h*60+mi+m; return `${pad(Math.floor((t%1440)/60))}:${pad(t%60)}`; };
-const diffHM=(a,b)=>{ const [h1,m1]=a.split(':').map(Number); const [h2,m2]=b.split(':').map(Number); return (h2*60+m2)-(h1*60+m1); };
+const addMinHM=(hm,m)=>{
+  const parts = hm.split(':').map(Number);
+  const h = parts[0]||0;
+  const mi = parts[1]||0;
+  const total = h*60+mi+m;
+  const hh = pad(Math.floor((total%1440)/60));
+  const mm = pad(total%60);
+  return `${hh}:${mm}:00`;
+};
+const diffHM=(a,b)=>{
+  const [h1,m1]=a.split(':').map(Number);
+  const [h2,m2]=b.split(':').map(Number);
+  return (h2*60+m2)-(h1*60+m1);
+};
+
+const STORAGE_NS = 'quickslots_v11';
+const STORAGE_PREFIX = `${STORAGE_NS}:day:`;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function to24h(s) {
+  if (!s) return '';
+  let str = String(s).trim();
+  let m = str.match(/^(AM|PM)\s*(\d{1,2}):(\d{2})(?::(\d{2}))?$/i);
+  if (m) {
+    let hh = parseInt(m[2],10);
+    const mm = m[3];
+    const ss = m[4]||'00';
+    const ap = m[1].toUpperCase();
+    if (ap==='PM' && hh<12) hh+=12;
+    if (ap==='AM' && hh===12) hh=0;
+    return `${String(hh).padStart(2,'0')}:${mm}:${ss}`;
+  }
+  m = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (m) {
+    let hh = parseInt(m[1],10);
+    const mm = m[2];
+    const ss = m[3]||'00';
+    const ap = m[4].toUpperCase();
+    if (ap==='PM' && hh<12) hh+=12;
+    if (ap==='AM' && hh===12) hh=0;
+    return `${String(hh).padStart(2,'0')}:${mm}:${ss}`;
+  }
+  m = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) {
+    const hh = Math.min(23, Math.max(0, parseInt(m[1],10)||0));
+    return `${String(hh).padStart(2,'0')}:${m[2]}:${m[3]||'00'}`;
+  }
+  return str;
+}
+
+function normalizeISO(iso){
+  return ISO_DATE_RE.test(iso||'') ? iso : todayISO();
+}
+function dayKey(iso){
+  return `${STORAGE_PREFIX}${normalizeISO(iso)}`;
+}
+function selectedISO(){
+  const el = document.getElementById('dayDate');
+  return normalizeISO(el && el.value ? el.value : todayISO());
+}
+function readDayPlan(iso){
+  try{
+    const raw = localStorage.getItem(dayKey(iso));
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ console.warn('readDayPlan failed', e); return null; }
+}
+function writeDayPlan(iso,data){
+  try{
+    localStorage.setItem(dayKey(iso), JSON.stringify(data));
+  }catch(e){ console.warn('writeDayPlan failed', e); }
+}
+function removeDayPlan(iso){
+  try{ localStorage.removeItem(dayKey(iso)); }catch(e){}
+}
+function listStoredIsos(){
+  const acc=[];
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(key && key.startsWith(STORAGE_PREFIX)){
+        const iso = key.slice(STORAGE_PREFIX.length);
+        if(ISO_DATE_RE.test(iso)) acc.push(iso);
+      }
+    }
+  }catch(e){}
+  return acc;
+}
+if (typeof window!=='undefined'){
+  window.to24h = to24h;
+  if(window.__perDayShim){
+    window.__perDayShim.dayKey = dayKey;
+    window.__perDayShim.normalizeISO = normalizeISO;
+  }
+}
 
 /* ===== Jalali (Shamsi) ===== */
 function div(a,b){ return Math.floor(a/b); }
@@ -557,7 +662,8 @@ function renderCourses(){
     const ses=box.querySelector('.sessions');
     (c.sessions||[]).forEach((s,si)=>{
       const row=document.createElement('div'); row.className='srow';
-      const dur=s.duration_hms||'00:30:00', val=dur;
+      const dur=to24h(s.duration_hms||'00:30:00');
+      const val=dur;
       row.innerHTML=`
         <div class="iconbtn add" title="افزودن به بلوک بعدی">➕</div>
         <div><div>${s.title}</div><div class="titleSmall">${s.chapter||'—'}</div></div>
@@ -596,43 +702,68 @@ function renderCourses(){
 
 /* === Auto-save & Auto-load (day-aware) === */
 let _autosaveTimer=null;
-const currentISO = ()=> ($('#dayDate').value||todayISO());
+const currentISO = ()=> selectedISO();
 function savePlanSilent(){
   try{
     const d=currentISO();
-    const rows=(slots||[]).filter(s=>s.item).map(s=>({start:s.start,end:s.end,course:s.item.course,title:s.item.title,chapter:s.item.chapter||'-',durMin:s.item.durMin}));
-    const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}');
-    all[d]={rows};
-    localStorage.setItem('quickslots_v11', JSON.stringify(all));
+    const rows=(slots||[])
+      .filter(s=>s.item)
+      .map(s=>({
+        start: to24h(s.start),
+        end: to24h(s.end),
+        course:s.item.course,
+        title:s.item.title,
+        chapter:s.item.chapter||'-',
+        durMin:s.item.durMin
+      }));
+    if(rows.length){
+      writeDayPlan(d,{rows});
+    }else{
+      removeDayPlan(d);
+    }
     localStorage.setItem('lastDate', d);
   }catch(e){ /* ignore */ }
 }
 function queueAutoSave(){ if(_autosaveTimer) clearTimeout(_autosaveTimer); _autosaveTimer=setTimeout(savePlanSilent, 400); }
 function loadPlanIfAny(dateISO){
-  const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}'); const rec=all[dateISO];
-  if(rec && rec.rows){
-    slots=rec.rows.map(r=>({start:r.start,end:r.end,item:{course:r.course,title:r.title,chapter:r.chapter,durMin:r.durMin}}));
-    renderSlots(); recalcProgress();
+  const iso = normalizeISO(dateISO||selectedISO());
+  const rec = readDayPlan(iso);
+  if(rec && Array.isArray(rec.rows)){
+    slots=rec.rows.map(r=>({
+      start: to24h(r.start||'00:00'),
+      end: to24h(r.end||'00:00'),
+      item: r.course ? {course:r.course,title:r.title,chapter:r.chapter,durMin:Number(r.durMin)||0} : null
+    }));
   }else{
-    slots = (slots||[]).map(s=>({start:s.start,end:s.end,item:null}));
-    renderSlots(); recalcProgress();
+    slots = generateSlotStructure();
   }
+  renderSlots();
+  recalcProgress();
 }
 window.addEventListener('beforeunload', savePlanSilent);
 
 /* ===== Slots / Timeline ===== */
-function buildSlots(){
-  slots=[];
-  const start=$('#startHM').value||'09:00';
-  const n=Math.max(1,Number($('#blocks').value||4));
-  const blockMin=Math.max(15,Number($('#blockMin').value||120));
-  const breakMin=Math.max(0,Number($('#breakMin').value||15));
+function generateSlotStructure(){
+  const startInput=$('#startHM');
+  const countInput=$('#blocks');
+  const blockInput=$('#blockMin');
+  const breakInput=$('#breakMin');
+  const start=to24h((startInput&&startInput.value)||'09:00');
+  const n=Math.max(1,Number(countInput&&countInput.value?countInput.value:4));
+  const blockMin=Math.max(15,Number(blockInput&&blockInput.value?blockInput.value:120));
+  const breakMin=Math.max(0,Number(breakInput&&breakInput.value?breakInput.value:15));
   let t=start;
+  const arr=[];
   for(let i=0;i<n;i++){
-    const s=t, e=addMinHM(s,blockMin);
-    slots.push({start:s,end:e,item:null});
-    t=addMinHM(e,breakMin);
+    const s=to24h(t);
+    const e=to24h(addMinHM(s,blockMin));
+    arr.push({start:s,end:e,item:null});
+    t=to24h(addMinHM(e,breakMin));
   }
+  return arr;
+}
+function buildSlots(){
+  slots=generateSlotStructure();
   renderSlots(); recalcProgress();
 }
 function renderHours(){
@@ -648,9 +779,13 @@ function renderSlots(){
     const div=document.createElement('div'); div.className='slot'+(sl.item?'':' empty');
     const title= sl.item? `<div class="title">${sl.item.course} — ${sl.item.title}</div>` : `<div class="small">خالی</div>`;
     const notes= sl.item? `<div class="notes">${sl.item.chapter||'—'} • ${minToHMS(sl.item.durMin)}</div>` : `<div class="notes">—</div>`;
+    const startVal = to24h(sl.start||'00:00');
+    const endVal = to24h(sl.end||'00:00');
+    slots[idx].start = startVal;
+    slots[idx].end = endVal;
     div.innerHTML=`
-      <input type="time" class="tStart" value="${sl.start}">
-      <input type="time" class="tEnd" value="${sl.end}">
+      <input type="time" step="1" class="tStart" value="${startVal}">
+      <input type="time" step="1" class="tEnd" value="${endVal}">
       <div>${title}${notes}</div>
       <button class="del" title="حذف">×</button>`;
     div.querySelector('.del').onclick=()=>{ slots[idx].item=null; renderSlots(); recalcProgress(); };
@@ -661,9 +796,11 @@ function renderSlots(){
   });
 }
 function onSlotTimeChange(i,sHM,eHM){
-  if(diffHM(sHM,eHM)<=0){ alert('پایان باید بعد از شروع باشد.'); renderSlots(); return; }
-  const cap=diffHM(sHM,eHM);
-  slots[i].start=sHM; slots[i].end=eHM;
+  const start = to24h(sHM);
+  const end = to24h(eHM);
+  if(diffHM(start,end)<=0){ alert('پایان باید بعد از شروع باشد.'); renderSlots(); return; }
+  const cap=diffHM(start,end);
+  slots[i].start=start; slots[i].end=end;
   if(slots[i].item){ if(slots[i].item.durMin>cap){ slots[i].item.durMin=cap; } }
   renderSlots(); recalcProgress();
 }
@@ -704,33 +841,50 @@ function autoFillByCourse(course){
 
 /* ===== Save / Load / History ===== */
 function savePlan(){
-  const d=$('#dayDate').value||todayISO();
-  const rows=slots.filter(s=>s.item).map(s=>({start:s.start,end:s.end,course:s.item.course,title:s.item.title,chapter:s.item.chapter||'-',durMin:s.item.durMin}));
-  const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}');
-  all[d]={rows};
-  localStorage.setItem('quickslots_v11', JSON.stringify(all));
+  const d=selectedISO();
+  const rows=slots.filter(s=>s.item).map(s=>({
+    start: to24h(s.start),
+    end: to24h(s.end),
+    course:s.item.course,
+    title:s.item.title,
+    chapter:s.item.chapter||'-',
+    durMin:s.item.durMin
+  }));
+  if(rows.length){
+    writeDayPlan(d,{rows});
+  }else{
+    removeDayPlan(d);
+  }
   alert('ثبت شد.');
   loadHistory(); localStorage.setItem('lastDate', d); updateFaDateShow();
 }
 function loadPlan(dateISO){
-  const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}'); const rec=all[dateISO];
-  if(!rec){ alert('برای این تاریخ چیزی ذخیره نشده.'); return; }
-  slots=rec.rows.map(r=>({start:r.start,end:r.end,item:{course:r.course,title:r.title,chapter:r.chapter,durMin:r.durMin}}));
-  renderSlots(); recalcProgress();
+  const iso=normalizeISO(dateISO||selectedISO());
+  localStorage.setItem('lastDate', iso);
+  loadPlanIfAny(iso);
+  updateFaDateShow();
 }
 function loadHistory(){
   const tb=$('#histTable tbody'); tb.innerHTML='';
-  const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}');
-  Object.entries(all).sort((a,b)=>a[0]>b[0]?-1:1).forEach(([d,rec])=>{
+  listStoredIsos().sort((a,b)=>a>b?-1:1).forEach(iso=>{
+    const rec=readDayPlan(iso);
+    if(!rec || !Array.isArray(rec.rows) || rec.rows.length===0) return;
     const totalMin=rec.rows.reduce((a,b)=>a+(b.durMin||0),0);
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${d}</td><td>${rec.rows.length}</td><td>${minToHMS(totalMin)}</td>`;
+    tr.innerHTML=`<td>${iso}</td><td>${rec.rows.length}</td><td>${minToHMS(totalMin)}</td>`;
     tb.appendChild(tr);
   });
 }
 function exportCSV(){
-  const d=$('#dayDate').value||todayISO();
-  const rows=slots.filter(s=>s.item).map(s=>({start:s.start,end:s.end,course:s.item.course,title:s.item.title,chapter:s.item.chapter||'-',durMin:s.item.durMin}));
+  const d=selectedISO();
+  const rows=slots.filter(s=>s.item).map(s=>({
+    start: to24h(s.start),
+    end: to24h(s.end),
+    course:s.item.course,
+    title:s.item.title,
+    chapter:s.item.chapter||'-',
+    durMin:s.item.durMin
+  }));
   const header=['date','start','end','course','title','chapter','dur_hms'];
   const csv=[header.join(',')].concat(rows.map(r=>[d,r.start,r.end,r.course,`"${(r.title||'').replace(/"/g,'""')}"`,`"${(r.chapter||'').replace(/"/g,'""')}"`,minToHMS(r.durMin)].join(','))).join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
@@ -808,11 +962,32 @@ function attach(){
   $('#initPtrs').onclick=()=>{ initPointers(); alert('اشاره‌گرها به ابتدای جلسات بازنشانی شدند.'); };
 
   $('#build').onclick=buildSlots; $('#save').onclick=savePlan; $('#load').onclick=()=>loadPlan($('#dayDate').value||todayISO());
-  $('#exportCSV').onclick=exportCSV; $('#clearDay').onclick=()=>{ slots=[]; renderSlots(); recalcProgress(); };
+  $('#exportCSV').onclick=exportCSV; $('#clearDay').onclick=()=>{ slots=[]; renderSlots(); recalcProgress(); removeDayPlan(selectedISO()); loadHistory(); };
 
-  $('#dayDate').onchange=()=>{ localStorage.setItem('lastDate',$('#dayDate').value); updateFaDateShow(); loadPlanIfAny($('#dayDate').value); };
-  $('#prevDay').onclick=()=>{ const d=new Date(($('#dayDate').value||todayISO())+"T00:00:00"); d.setDate(d.getDate()-1); $('#dayDate').value=d.toISOString().slice(0,10); updateFaDateShow(); loadPlanIfAny($('#dayDate').value); };
-  $('#nextDay').onclick=()=>{ const d=new Date(($('#dayDate').value||todayISO())+"T00:00:00"); d.setDate(d.getDate()+1); $('#dayDate').value=d.toISOString().slice(0,10); updateFaDateShow(); loadPlanIfAny($('#dayDate').value); };
+  $('#dayDate').onchange=()=>{
+    const iso=selectedISO();
+    localStorage.setItem('lastDate',iso);
+    updateFaDateShow();
+    loadPlanIfAny(iso);
+  };
+  $('#prevDay').onclick=()=>{
+    const base=new Date((selectedISO())+"T00:00:00");
+    base.setDate(base.getDate()-1);
+    const iso=base.toISOString().slice(0,10);
+    $('#dayDate').value=iso;
+    localStorage.setItem('lastDate',iso);
+    updateFaDateShow();
+    loadPlanIfAny(iso);
+  };
+  $('#nextDay').onclick=()=>{
+    const base=new Date((selectedISO())+"T00:00:00");
+    base.setDate(base.getDate()+1);
+    const iso=base.toISOString().slice(0,10);
+    $('#dayDate').value=iso;
+    localStorage.setItem('lastDate',iso);
+    updateFaDateShow();
+    loadPlanIfAny(iso);
+  };
 
   // Auto update on any slot change
   const grid = document.getElementById('slotGrid');
@@ -825,11 +1000,13 @@ function attach(){
 
 function boot(){
   // Date init (week starts Saturday: handled by your mental model; here we just set date)
-  const last=localStorage.getItem('lastDate'); $('#dayDate').value = last || todayISO();
+  const last=localStorage.getItem('lastDate');
+  const initial=normalizeISO(last||todayISO());
+  $('#dayDate').value = initial;
   updateFaDateShow();
   renderHours();
   buildSlots();
-  loadPlanIfAny($('#dayDate').value||todayISO());
+  loadPlanIfAny(initial);
   initPointers();
   renderCourses(); validateCatalog();
   loadHistory();
@@ -1022,7 +1199,8 @@ window.addEventListener('DOMContentLoaded', ()=>{ attach(); boot(); });
 
   // Wrap per-day save/load if available; else create light versions
   const dayNS = (per.STORAGE_NS || 'quickslots_v11');
-  const dayKey = (iso) => `${dayNS}:day:${iso}`;
+  const normalizeIso = per.normalizeISO || (iso=>iso);
+  const dayKey = per.dayKey || ((iso) => `${dayNS}:day:${normalizeIso(iso)}`);
 
   function buildPayload(){
     const st = window.__state__ || {};
@@ -1176,7 +1354,8 @@ window.addEventListener('DOMContentLoaded', ()=>{ attach(); boot(); });
   const per = window.__perDayShim || {};
   const safe = window.__perDaySafe || {};
   const NS = (per.STORAGE_NS || 'quickslots_v11');
-  const dayKey = (iso)=> `${NS}:day:${iso}`;
+  const normalizeIso = per.normalizeISO || (iso=>iso);
+  const dayKey = per.dayKey || ((iso)=> `${NS}:day:${normalizeIso(iso)}`);
   const backupsKey = (iso)=> `${dayKey(iso)}:backups`;
 
   function qs(s){ return document.querySelector(s); }
@@ -1278,6 +1457,7 @@ window.addEventListener('DOMContentLoaded', ()=>{ attach(); boot(); });
 
   // 24h time fixer: convert e.g., "PM 03:01" or "AM 00:09" to "15:01" / "00:09"
   function fix24(s){
+    if(typeof window!=='undefined' && typeof window.to24h==='function') return window.to24h(s);
     if(!s) return '';
     const t = String(s).trim();
     const m = t.match(/^(AM|PM)\s*(\d{1,2}):(\d{2})(?::(\d{2}))?$/i);
@@ -1423,6 +1603,7 @@ window.addEventListener('DOMContentLoaded', ()=>{ attach(); boot(); });
 
   // ===== 24h normalization (strict) =====
   function fix24(s){
+    if(typeof window!=='undefined' && typeof window.to24h==='function') return window.to24h(s);
     if(!s) return '';
     const t = String(s).trim();
     // already HH:MM or HH:MM:SS → force SS
@@ -1494,86 +1675,5 @@ window.addEventListener('DOMContentLoaded', ()=>{ attach(); boot(); });
 </script>
 <!-- /injected: weekday+24h -->
 
-<script>
-// === Clean 24h patch (safe, no Shadow tricks, no global overrides) ===
-(function(){
-  "use strict";
-  function to24(t){
-    if(!t) return t;
-    t = String(t).trim();
-    var m = t.match(/^(AM|PM)\s*(\d{1,2}):(\d{2})(?::(\d{2}))?$/i);
-    if(m){
-      var hh = parseInt(m[2],10), mm=m[3], ss=m[4]||'00', ap=m[1].toUpperCase();
-      if(ap==='PM' && hh<12) hh+=12;
-      if(ap==='AM' && hh===12) hh=0;
-      return String(hh).padStart(2,'0')+':'+mm+':'+ss;
-    }
-    m = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i);
-    if(m){
-      var hh2 = parseInt(m[1],10), mm2=m[2], ss2=m[3]||'00', ap2=m[4].toUpperCase();
-      if(ap2==='PM' && hh2<12) hh2+=12;
-      if(ap2==='AM' && hh2===12) hh2=0;
-      return String(hh2).padStart(2,'0')+':'+mm2+':'+ss2;
-    }
-    // If already HH:MM or HH:MM:SS ensure :SS
-    m = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if(m){
-      var H = Math.max(0, Math.min(23, parseInt(m[1],10)));
-      return String(H).padStart(2,'0')+':'+m[2]+':'+(m[3]||'00');
-    }
-    return t;
-  }
-
-  function sanitizeRoot(root){
-    if(!root) return;
-    // inputs/texts
-    var nodes = root.querySelectorAll('input, .time, .badge, .chip, [data-time], [data-start], [data-end], .slot, .slot_time, .slot_notes, .block');
-    nodes.forEach(function(el){
-      if ('value' in el && el.value){
-        var v = el.value;
-        if (/(AM|PM)/i.test(v)) el.value = to24(v);
-      }
-      ['textContent'].forEach(function(k){
-        var txt = el[k];
-        if (txt && /(AM|PM)/i.test(txt)) el[k] = to24(txt);
-      });
-      ['placeholder','title','aria-label','data-time','data-start','data-end'].forEach(function(a){
-        var v2 = el.getAttribute && el.getAttribute(a);
-        if (v2 && /(AM|PM)/i.test(v2)) el.setAttribute(a, to24(v2));
-      });
-    });
-  }
-
-  document.addEventListener('DOMContentLoaded', function(){
-    sanitizeRoot(document);
-    // After each renderBlocks, sanitize again
-    if (typeof window.renderBlocks === 'function'){
-      var _orig = window.renderBlocks;
-      window.renderBlocks = function(){
-        var r = _orig.apply(this, arguments);
-        try{ sanitizeRoot(document); }catch(e){}
-        return r;
-      };
-    }
-    // Observe future mutations lightly
-    var mo = new MutationObserver(function(muts){
-      for (var i=0;i<muts.length;i++){
-        var m = muts[i];
-        if (m.addedNodes && m.addedNodes.length){
-          for (var j=0;j<m.addedNodes.length;j++){
-            var n = m.addedNodes[j];
-            if (n.nodeType===1) sanitizeRoot(n);
-          }
-        }
-        if (m.type==='characterData'){
-          var p = m.target.parentElement;
-          if (p) sanitizeRoot(p);
-        }
-      }
-    });
-    mo.observe(document.body, { childList:true, subtree:true, characterData:true });
-  });
-})();
-</script>
 </body>
 </html>
