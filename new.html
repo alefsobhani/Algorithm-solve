@@ -1,0 +1,1579 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+\
+<!-- injected: polish styles -->
+<style>
+:root {
+  --ui-radius: 14px;
+  --ui-gap: 10px;
+  --ui-shadow: 0 6px 28px rgba(0,0,0,.35);
+  --chip-bg: rgba(255,255,255,.05);
+  --chip-bg-active: rgba(0,122,255,.18);
+  --chip-text: rgba(255,255,255,.86);
+  --muted: rgba(255,255,255,.55);
+  --accent: #0a84ff;
+}
+.toolbar-pro {
+  display:flex; gap:var(--ui-gap); align-items:center; flex-wrap:wrap;
+  padding:8px 12px; border-radius:var(--ui-radius); background:rgba(255,255,255,.04);
+  box-shadow: var(--ui-shadow); margin:8px 0 10px 0;
+}
+.toolbar-pro button, .toolbar-pro .btn {
+  border:1px solid rgba(255,255,255,.15); border-radius:12px; padding:8px 10px;
+  background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  color:var(--chip-text); cursor:pointer; font-size:12px;
+}
+.toolbar-pro .btn.primary { border-color:rgba(10,132,255,.6); background:linear-gradient(180deg, rgba(10,132,255,.28), rgba(10,132,255,.12)); }
+.toolbar-pro .btn.ghost { background:transparent; }
+.toolbar-pro .sep { width:1px; height:26px; background:rgba(255,255,255,.12); margin:0 6px; }
+.badge-muted { color:var(--muted); font-size:12px; }
+#jalaliBadge { margin-inline-start:auto; font-weight:600; }
+.dayChip { user-select:none; }
+.dayChip.active { background: var(--chip-bg-active) !important; color:#fff; }
+</style>
+<!-- /polish styles -->
+
+
+<!-- injected early: localStorage per-day shim -->
+<script>
+(function(){
+  const STORAGE_NS = 'quickslots_v11';
+  const dayKey = (iso) => `${STORAGE_NS}:day:${iso}`;
+
+  function isoToday(){ return new Date().toISOString().slice(0,10); }
+  function currentISO() {
+    const el = document.getElementById('dayDate') || document.querySelector('input[type="date"].dayDate');
+    if (el && el.value) return el.value;
+    try {
+      const last = localStorage.getItem('lastDate');
+      if (last && /^\d{4}-\d{2}-\d{2}$/.test(last)) return last;
+    } catch(e) {}
+    return isoToday();
+  }
+
+  // One-time migration
+  try {
+    const legacy = localStorage.getItem(STORAGE_NS);
+    if (legacy && !localStorage.getItem(dayKey(currentISO()))) {
+      localStorage.setItem(dayKey(currentISO()), legacy);
+    }
+    if (legacy) localStorage.removeItem(STORAGE_NS);
+  } catch (e) {}
+
+  const __orig_get = localStorage.getItem.bind(localStorage);
+  const __orig_set = localStorage.setItem.bind(localStorage);
+  const __orig_del = localStorage.removeItem.bind(localStorage);
+
+  function mapKey(k){
+    if (k === STORAGE_NS) return dayKey(currentISO());
+    return k;
+  }
+
+  localStorage.getItem = function(k){ return __orig_get(mapKey(k)); };
+  localStorage.setItem = function(k,v){ return __orig_set(mapKey(k), v); };
+  localStorage.removeItem = function(k){ return __orig_del(mapKey(k)); };
+
+  window.__perDayShim = { STORAGE_NS, dayKey, currentISO };
+})();
+</script>
+<!-- /injected early -->
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UniPlanner v11 — Reimagined (Buckets + Timeline)</title>
+
+<style>
+  :root{
+    --bg:#0c0f14; --panel:rgba(18,23,34,0.9); --muted:#98a3b8; --text:#eaf1ff;
+    --accent:#5ea1ff; --accent2:#22d3a3; --danger:#ef5a5a; --border:rgba(142,160,193,0.15);
+    --chip:rgba(18,23,34,0.75); --glass:rgba(255,255,255,0.06);
+    --ring:#2b3852; --shadow:0 12px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.03);
+    --grad:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,0));
+   --drawer-width: 560px; --drawer-radius: 16px; --drawer-shadow: 0 18px 50px rgba(0,0,0,.45); }
+  html,body{height:100%;background:radial-gradient(1200px 800px at 80% -10%, rgba(94,161,255,.18), transparent 40%),
+                                radial-gradient(900px 600px at -10% 120%, rgba(34,211,163,.12), transparent 40%),
+                                var(--bg);
+            color:var(--text);font:14px/1.5 "Vazirmatn", "IRANSansX", system-ui;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  ::selection{background:rgba(94,161,255,.25)}
+  .app{display:grid;grid-template-columns:1fr 330px;gap:14px;max-width:1440px;margin:18px auto;padding:0 14px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+  .panel header{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--grad)}
+  .panel header h3{margin:0;font-size:16px;letter-spacing:.2px}
+  .panel .body{padding:14px 16px}
+  input,select,button{font:inherit}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{position:relative;background:var(--chip);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:12px;cursor:pointer;transition:.18s ease;
+       box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(94,161,255,.12), inset 0 0 0 1px rgba(255,255,255,.02)}
+  .btn:active{transform:translateY(0)}
+  .btn.primary{background:linear-gradient(180deg,#5ea1ff,#3a7dfa);border-color:#5ea1ff}
+  .btn.ghost{background:transparent}
+  .pill{background:var(--chip);padding:6px 12px;border:1px solid var(--border);border-radius:999px;color:var(--muted);box-shadow:inset 0 1px 0 rgba(255,255,255,.02)}
+  .field{display:flex;gap:8px;align-items:center}
+  .field input[type="search"], .field input[type="time"], .field input[type="number"]{background:#0c121e;border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:10px;outline:none;min-width:0;transition:border .15s ease, box-shadow .15s ease}
+  .field input:focus{border-color:#3a7dfa; box-shadow:0 0 0 3px rgba(62,125,250,.22)}
+  /* Scrollbar */
+  ::-webkit-scrollbar{height:12px;width:12px}
+  ::-webkit-scrollbar-thumb{background:rgba(94,161,255,.35);border:3px solid transparent;border-radius:999px;background-clip:padding-box}
+  ::-webkit-scrollbar-track{background:transparent}
+  /* Course cards */
+  .course{border:1px solid var(--border);border-radius:14px;padding:12px;background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);margin-bottom:12px;transition:transform .18s ease, box-shadow .18s ease}
+  .course:hover{transform:translateY(-2px); box-shadow:0 12px 26px rgba(0,0,0,.25)}
+  .metaRow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+  .progress{height:10px;background:#0c121e;border:1px solid var(--border);border-radius:999px;overflow:hidden;margin-top:8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.02)}
+  .progress span{display:block;height:100%;background:linear-gradient(90deg,#3a7dfa,#22d3a3);width:0;transition:width 380ms cubic-bezier(.2,.8,.2,1);will-change:width}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;background:var(--chip);border:1px solid var(--border);color:var(--muted);font-size:12px}
+  .course footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .sessions{margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;display:none}
+  .course.open .sessions{display:block;animation:fadeIn .25s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .srow{display:grid;grid-template-columns:26px 1fr 180px 120px 34px;align-items:center;gap:8px;padding:8px;border-radius:10px}
+  .srow:nth-child(odd){background:rgba(255,255,255,.02)}
+  .iconbtn{cursor:pointer;user-select:none;transition:.15s ease}
+  .iconbtn:hover{filter:drop-shadow(0 6px 18px rgba(94,161,255,.35))}
+  .iconbtn.add{font-size:18px}
+  .titleSmall{font-size:12px;color:var(--muted)}
+  .chev{display:inline-block;transform:rotate(0deg);transition:transform .2s ease; margin-inline-start:6px; opacity:.8}
+  .course.open .chev{transform:rotate(180deg)}
+  /* center column */
+  .dayHead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .date{display:flex;align-items:center;gap:10px}
+  .grid{display:grid;grid-template-columns:160px 1fr;gap:12px}
+  .hours{display:flex;flex-direction:column;gap:10px}
+  .hours .hr{height:56px;border:1px dashed var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center;color:#9aa3b6;background:#0c121e}
+  .slots{display:flex;flex-direction:column;gap:10px}
+  .slot{display:grid;grid-template-columns:100px 100px 1fr 36px;gap:10px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.03),transparent);
+        transition:box-shadow .15s ease, transform .15s ease}
+  .slot:hover{box-shadow:0 8px 24px rgba(0,0,0,.25); transform:translateY(-1px)}
+  .slot.empty{opacity:.8}
+  .slot .small{color:var(--muted);font-size:12px}
+  .slot input[type="time"]{background:#0c121e;border:1px solid var(--border);color:var(--text);padding:7px 8px;border-radius:10px}
+  .slot .title{font-weight:700;letter-spacing:.2px}
+  .slot .notes{font-size:12px;color:var(--muted)}
+  .del{background:#1b2230;border:1px solid var(--border);color:#ffb4b4;border-radius:10px;padding:7px 8px;cursor:pointer;transition:.15s ease}
+  .del:hover{background:#221b1b;border-color:#ff8e8e}
+  /* right stats */
+  .stats{display:grid;gap:12px}
+  .statRow{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(180deg,rgba(255,255,255,.03),transparent);border:1px solid var(--border);padding:12px;border-radius:14px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px;border-bottom:1px dashed var(--border);text-align:right}
+  .muted{color:var(--muted)}
+  .hist{max-height:240px;overflow:auto;border:1px solid var(--border);border-radius:14px}
+  .divider{height:1px;background:var(--border);margin:12px 0}
+
+/* Drawer & Overlay */
+ .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:.24s ease;z-index:40} 
+.overlay.show{opacity:1;pointer-events:all}
+.drawer{position:fixed;top:0;right:0;width:var(--drawer-width);max-width:92vw;height:100dvh;background:var(--panel);border-inline-start:1px solid var(--border);transform:translateX(102%);transition:transform .32s cubic-bezier(.2,.8,.2,1), box-shadow .32s ease;box-shadow:var(--drawer-shadow);backdrop-filter:blur(12px);z-index:50;display:flex;flex-direction:column;border-top-left-radius:var(--drawer-radius);border-bottom-left-radius:var(--drawer-radius);}
+.drawer.open{transform:translateX(0)}
+.drawerHead{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);background:var(--grad)}
+ .drawerTitle{font-weight:800;letter-spacing:.2px} 
+ .drawerBody{padding:16px 18px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:10px} 
+ .btn.icon{padding:10px 12px;min-width:42px;text-align:center;border-radius:12px} 
+.leftTools{display:flex;gap:8px;align-items:center}
+/* Validator panel */
+.validator{margin-top:12px;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.validator header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--grad);border-bottom:1px solid var(--border)}
+.validator .body{padding:10px 12px}
+.bad{color:#ff8080}
+.good{color:#22d3a3}
+.listIssues{max-height:180px;overflow:auto;padding:8px;border:1px dashed var(--border);border-radius:10px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--border);padding:6px 10px;border-radius:999px}
+
+
+/* Drawer polish */
+.drawer .btn{background:var(--chip);border:1px solid var(--border)}
+.drawer .btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(94,161,255,.12)}
+.drawer .field input[type="search"]{padding:12px 14px;border-radius:12px}
+.drawer .toolbar{gap:8px;flex-wrap:wrap}
+/* Larger course cards in drawer for readability */
+#coursesList .course{padding:14px;border-radius:14px}
+#coursesList .course .metaRow{gap:12px}
+#coursesList .srow{grid-template-columns:26px 1fr 180px 120px 34px}
+/* Smooth opening */
+.drawer.open{transform:translateX(0) }
+@media (max-width:480px){
+  :root{ --drawer-width: 92vw; }
+}
+
+
+/* ==== Drawer consistency fixes for session list ==== */
+.drawer *{box-sizing:border-box}
+
+/* Normalize inputs/pills inside drawer */
+.drawer input[type="text"],
+.drawer input[type="search"],
+.drawer input[type="time"],
+.drawer .pill,
+.drawer .badge,
+.drawer .boxlike{
+  background: var(--layer);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+/* Course header strip */
+.drawer .courseHead{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-radius:14px; background:var(--chip);
+  border:1px solid var(--border); margin-bottom:8px;
+}
+
+/* Session row grid & overflow safety */
+.drawer .srow{ 
+  display:grid; grid-template-columns: 26px 1fr 180px 120px 34px; 
+  align-items:center; gap:10px; 
+  padding:10px 12px; border-radius:14px; background:var(--panel);
+  border:1px solid var(--border);
+}
+.drawer .srow > *{min-width:0; overflow:hidden}
+.drawer .srow input, 
+.drawer .srow .timebox, 
+.drawer .srow .titlebox{
+  width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+/* Make the leading time badge look integrated (no stark white) */
+.drawer .timeBadge, 
+.drawer .durationBadge, 
+.drawer .srow .time{
+  background:var(--chip);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:8px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Plus/Delete icon buttons unified */
+.drawer .srow .iconBtn, 
+.drawer .courseHead .iconBtn,
+.drawer .btn.icon{
+  width:36px; height:36px; display:inline-grid; place-items:center;
+  border-radius:12px; border:1px solid var(--border); background:var(--chip);
+}
+
+/* Prevent elements from sticking out of the drawer */
+.drawer{contain:layout paint; overflow:hidden}
+.drawer .drawerBody{overflow:auto}
+
+/* Slightly larger scrollbar inside drawer for precision */
+.drawer .drawerBody::-webkit-scrollbar{width:10px}
+.drawer .drawerBody::-webkit-scrollbar-thumb{background:var(--border); border-radius:8px}
+
+
+/* === Overflow fixes for drawer items and timetable blocks === */
+.drawer .srow > *{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.drawer .srow input{min-width:0}
+.drawer .course{min-width:0}
+.drawer .course *{min-width:0}
+
+.schedule, .timetable, .blocks, .blockRow, .blockCard{min-width:0}
+.blockCard{display:grid; grid-template-columns: 110px 1fr 120px; gap:10px; align-items:center;
+  background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:10px 12px}
+.blockCard > *{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.blockCard .timeBadge{background:var(--chip); border:1px solid var(--border); border-radius:10px; padding:8px 10px;
+  font-variant-numeric: tabular-nums; text-align:center}
+.blockCard .title{font-weight:600}
+/* Prevent any child from protruding beyond drawer width */
+.drawer .drawerBody{overflow:auto; padding-bottom:18px}
+
+
+/* === Unified dark style for date input (top white box) === */
+input[type="date"]{
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--chip);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  height: 38px;
+  line-height: 38px;
+  padding: 0 12px;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+}
+input[type="date"]:focus{
+  outline: 2px solid var(--ring);
+  border-color: var(--ring);
+}
+/* icon color in Chromium */
+input[type="date"]::-webkit-calendar-picker-indicator{
+  filter: invert(1) opacity(.9);
+}
+/* placeholder / value alignment for Firefox */
+input[type="date"]::-moz-focus-inner{ border:0; }
+
+</style>
+
+<style>
+
+/* === Day Chips (1..365) bar === */
+.chipsScroll{display:flex;gap:8px;overflow:auto;padding:8px 2px;margin:8px 0}
+.chipsScroll::-webkit-scrollbar{height:10px}
+.dayChip{
+  background:var(--chip); border:1px solid var(--border); color:var(--text);
+  padding:8px 12px; border-radius:999px; cursor:pointer; white-space:nowrap;
+  user-select:none; transition:.18s ease; font-variant-numeric:tabular-nums;
+}
+.dayChip:hover{transform:translateY(-1px); box-shadow:0 6px 18px rgba(94,161,255,.12)}
+.dayChip.active{background:linear-gradient(180deg,#5ea1ff,#3a7dfa); border-color:#5ea1ff; color:white}
+/* slight divider for separation */
+.dayChipsDivider{height:1px;background:var(--border);margin:10px 0}
+
+</style>
+<!-- injected: sync day chips to currentISO -->
+<script>
+(function(){
+  function ensureDayInput(){
+    let el = document.getElementById('dayDate') || document.querySelector('input[type="date"].dayDate');
+    if (!el) {
+      el = document.createElement('input');
+      el.type = 'date';
+      el.id = 'dayDate';
+      el.style.display = 'none';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function isoFromDOY(year, doy){
+    const d = new Date(Date.UTC(year,0,1));
+    d.setUTCDate(d.getUTCDate() + (doy-1));
+    return d.toISOString().slice(0,10);
+  }
+  document.addEventListener('click', (ev)=>{
+    const chip = ev.target.closest('.dayChip');
+    if(!chip) return;
+    let iso = chip.dataset.iso;
+    if(!iso){
+      const doy = parseInt(chip.dataset.day||chip.textContent,10);
+      const base = (localStorage.getItem('lastDate') || new Date().toISOString().slice(0,10));
+      const yr = new Date(base).getFullYear();
+      if(Number.isInteger(doy) && doy>=1 && doy<=366){
+        iso = isoFromDOY(yr, doy);
+      }
+    }
+    if(iso){
+      const input = ensureDayInput();
+      input.value = iso;
+      try { localStorage.setItem('lastDate', iso); } catch(e){}
+    }
+  }, true);
+})();
+</script>
+<!-- /injected: sync day chips -->
+</head>
+<body>
+
+<!-- Drawer: Library (Hamburger) -->
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawerHead">
+    <div class="drawerTitle">کتابخانهٔ درس‌ها</div>
+    <button class="btn icon" id="closeDrawer" title="بستن">✕</button>
+  </div>
+  <div class="drawerBody">
+    <div class="field" style="margin-bottom:8px">
+      <input id="search" type="search" placeholder="جستجو در نام درس/جلسه…">
+    </div>
+    <div class="toolbar" style="margin-bottom:10px">
+      <button class="btn" id="toggleAll">باز/بستن همه</button>
+      <button class="btn" id="initPtrs">شروع از ابتدای جلسات</button>
+    </div>
+    <div id="coursesList"></div>
+  </div>
+</aside>
+
+<div class="app">
+  <!-- CENTER: Day Composer -->
+  <div class="panel">
+    <header><div class="leftTools"><button class="btn icon" id="openDrawer" title="کتابخانه">☰</button></div><h3>برنامه‌ریز روزانه (۲۴ ساعته)</h3></header>
+    <div class="body">
+      <div class="dayHead">
+        <div class="date">
+          <input id="dayDate" type="date">
+          <span class="pill" id="faDateShow">—</span>
+        </div>
+        <div class="toolbar" style="margin-inline-start:auto">
+          <button class="btn" id="prevDay">روز قبل</button>
+          <button class="btn" id="nextDay">روز بعد</button>
+          <button class="btn primary" id="save">ثبت برنامه</button>
+          <button class="btn" id="load">بارگذاری برنامه</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="toolbar" style="margin-bottom:10px">
+        <div class="field">
+          <label class="pill">شروع</label><input id="startHM" type="time" value="09:00">
+        </div>
+        <div class="field">
+          <label class="pill">بلوک‌ها</label><input id="blocks" type="number" min="1" value="4" style="width:80px">
+        </div>
+        <div class="field">
+          <label class="pill">مدت هر بلوک (دقیقه)</label><input id="blockMin" type="number" min="15" value="120" style="width:100px">
+        </div>
+        <div class="field">
+          <label class="pill">وقفه (دقیقه)</label><input id="breakMin" type="number" min="0" value="15" style="width:100px">
+        </div>
+        <button class="btn" id="build">ساخت بلوک‌ها</button>
+        <div class="pill"><span id="sumBadge">جمع: 00:00:00</span></div>
+      </div>
+
+      <div class="grid">
+        <div class="hours" id="hoursCol"></div>
+        <div class="slots" id="slotGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Stats & History -->
+  <div class="panel">
+    <header><h3>آمار و تاریخچه</h3></header>
+    <div class="body">
+      <div class="stats">
+        <div class="statRow"><div>کلِ برنامهٔ امروز</div><strong id="todayTotal">00:00:00</strong></div>
+        <div class="statRow"><div>میانگین هر بلوک</div><strong id="avgBlock">00:00:00</strong></div>
+        <div class="statRow"><div>درس‌های پوشش‌داده‌شده</div><strong id="covered">0</strong></div>
+      </div>
+      
+      <div class="validator">
+        <header>
+          <div>گزارش سلامت درس‌ها</div>
+          <button class="btn" id="runValidate">بررسی</button>
+        </header>
+        <div class="body">
+          <div class="badge"><span>دروس:</span><strong id="countCourses">0</strong> • <span>جلسات:</span><strong id="countSessions">0</strong></div>
+          <div style="margin:8px 0"><span class="good">درست:</span> <strong id="okCount">0</strong> • <span class="bad">ایراد:</span> <strong id="errCount">0</strong></div>
+          <div class="listIssues" id="issuesBox">—</div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <button class="btn" id="exportCSV">خروجی CSV</button>
+        <button class="btn" id="clearDay">پاک‌کردن روز</button>
+      </div>
+      <div class="hist">
+        <table id="histTable">
+          <thead><tr><th>تاریخ</th><th>بلوک‌ها</th><th>مدت برنامه</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Catalog placeholder (will be overridden by localStorage if any) -->
+<script id="catalog" type="application/json">{"courses": [{"name": "الکترونیک دیجیتال", "sessions": [{"title": "جلسه اول بخش 1", "chapter": "فصل 1", "duration_hms": "01:50:33"}, {"title": "جلسه اول بخش 2", "chapter": "فصل 2", "duration_hms": "01:17:12"}, {"title": "جلسه دوم بخش 1", "chapter": "فصل 3", "duration_hms": "01:47:07"}, {"title": "جلسه دوم بخش 2", "chapter": "فصل 4", "duration_hms": "01:44:04"}, {"title": "جلسه سوم بخش 1", "chapter": "فصل 5", "duration_hms": "00:39:17"}, {"title": "جلسه سوم بخش 2", "chapter": "فصل 6", "duration_hms": "01:15:18"}, {"title": "جلسه چهارم بخش 1", "chapter": "فصل 7", "duration_hms": "01:45:21"}, {"title": "جلسه چهارم بخش 2", "chapter": "فصل 8", "duration_hms": "01:19:49"}, {"title": "جلسه پنجم بخش 1", "chapter": "فصل 9", "duration_hms": "01:33:20"}, {"title": "جلسه پنجم بخش 2", "chapter": "فصل 10", "duration_hms": "01:21:06"}, {"title": "جلسه ششم", "chapter": "فصل 11", "duration_hms": "02:06:44"}, {"title": "جلسه هفتم بخش 1", "chapter": "فصل 12", "duration_hms": "01:26:23"}, {"title": "جلسه هفتم بخش 2", "chapter": "فصل 13", "duration_hms": "01:18:18"}, {"title": "جلسه هشتم بخش 1", "chapter": "فصل 14", "duration_hms": "01:31:48"}, {"title": "جلسه هشتم بخش 2", "chapter": "فصل 15", "duration_hms": "01:03:19"}, {"title": "جلسه نهم", "chapter": "فصل 16", "duration_hms": "02:36:44"}, {"title": "جلسه دهم بخش 1", "chapter": "فصل 17", "duration_hms": "01:33:41"}, {"title": "جلسه دهم بخش 2", "chapter": "فصل 18", "duration_hms": "01:15:36"}, {"title": "جلسه یازدهم بخش 1", "chapter": "فصل 19", "duration_hms": "01:51:53"}, {"title": "جلسه یازدهم بخش 2", "chapter": "فصل 20", "duration_hms": "01:27:32"}, {"title": "جلسه دوازدهم بخش 1", "chapter": "فصل 21", "duration_hms": "00:37:16"}, {"title": "جلسه دوازدهم بخش 2", "chapter": "فصل 22", "duration_hms": "00:53:26"}, {"title": "جلسه دوازدهم بخش 3", "chapter": "فصل 23", "duration_hms": "01:05:48"}, {"title": "جلسه سیزدهم بخش 1", "chapter": "فصل 24", "duration_hms": "01:28:10"}, {"title": "جلسه سیزدهم بخش 2", "chapter": "فصل 25", "duration_hms": "01:00:40"}, {"title": "جلسه چهاردهم بخش 1", "chapter": "فصل 26", "duration_hms": "01:32:01"}, {"title": "جلسه چهاردهم بخش 2", "chapter": "فصل 27", "duration_hms": "00:55:13"}, {"title": "جلسه پانزدهم بخش 1", "chapter": "فصل 28", "duration_hms": "01:33:12"}, {"title": "جلسه پانزدهم بخش 2", "chapter": "فصل 29", "duration_hms": "01:30:28"}, {"title": "جلسه شانزدهم", "chapter": "فصل 30", "duration_hms": "01:40:02"}]}, {"name": "ریاضیات گسسته", "sessions": [{"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید)", "chapter": "فصل 1", "duration_hms": "01:30:01"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۲)", "chapter": "فصل 2", "duration_hms": "01:24:41"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۳)", "chapter": "فصل 3", "duration_hms": "01:30:21"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۴)", "chapter": "فصل 4", "duration_hms": "01:29:25"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۵)", "chapter": "فصل 5", "duration_hms": "01:31:42"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۶)", "chapter": "فصل 6", "duration_hms": "01:56:59"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۷)", "chapter": "فصل 7", "duration_hms": "01:35:20"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۸)", "chapter": "فصل 8", "duration_hms": "01:33:33"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۹)", "chapter": "فصل 9", "duration_hms": "00:23:44"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۰)", "chapter": "فصل 10", "duration_hms": "01:52:42"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۱)", "chapter": "فصل 11", "duration_hms": "01:27:11"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۲)", "chapter": "فصل 12", "duration_hms": "01:04:30"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۳)", "chapter": "فصل 13", "duration_hms": "01:03:39"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۴)", "chapter": "فصل 14", "duration_hms": "01:03:52"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۵)", "chapter": "فصل 15", "duration_hms": "01:20:55"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۶)", "chapter": "فصل 16", "duration_hms": "01:16:42"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۷)", "chapter": "فصل 17", "duration_hms": "01:26:58"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۸)", "chapter": "فصل 18", "duration_hms": "01:03:57"}, {"title": "بازگشتی‌ها", "chapter": "فصل 19", "duration_hms": "01:40:10"}, {"title": "بازگشتی‌ها (۲)", "chapter": "فصل 20", "duration_hms": "01:21:48"}, {"title": "بازگشتی‌ها (۳)", "chapter": "فصل 21", "duration_hms": "01:16:46"}, {"title": "بازگشتی‌ها (۴)", "chapter": "فصل 22", "duration_hms": "01:33:10"}, {"title": "بازگشتی‌ها (۵)", "chapter": "فصل 23", "duration_hms": "01:24:23"}, {"title": "بازگشتی‌ها (۶)", "chapter": "فصل 24", "duration_hms": "01:43:56"}, {"title": "بازگشتی‌ها (۷)", "chapter": "فصل 25", "duration_hms": "02:24:38"}, {"title": "بازگشتی‌ها (۸)", "chapter": "فصل 26", "duration_hms": "01:07:44"}, {"title": "بازگشتی‌ها (۹)", "chapter": "فصل 27", "duration_hms": "01:22:49"}, {"title": "بازگشتی‌ها (۱۰)", "chapter": "فصل 28", "duration_hms": "01:04:33"}, {"title": "بازگشتی‌ها (۱۱)", "chapter": "فصل 29", "duration_hms": "02:11:30"}, {"title": "روابط", "chapter": "فصل 30", "duration_hms": "01:04:30"}, {"title": "روابط (۲)", "chapter": "فصل 31", "duration_hms": "01:10:39"}, {"title": "روابط (۳)", "chapter": "فصل 32", "duration_hms": "01:03:39"}, {"title": "روابط (۴)", "chapter": "فصل 33", "duration_hms": "01:03:52"}, {"title": "روابط (۵)", "chapter": "فصل 34", "duration_hms": "01:20:55"}, {"title": "روابط (۶)", "chapter": "فصل 35", "duration_hms": "01:16:42"}, {"title": "روابط (۷)", "chapter": "فصل 36", "duration_hms": "01:26:58"}, {"title": "روابط (۸)", "chapter": "فصل 37", "duration_hms": "01:03:57"}, {"title": "روابط (۹)", "chapter": "فصل 38", "duration_hms": "01:40:10"}, {"title": "روابط (۱۰)", "chapter": "فصل 39", "duration_hms": "01:21:48"}, {"title": "روابط (۱۱)", "chapter": "فصل 40", "duration_hms": "01:16:46"}, {"title": "روابط (۱۲)", "chapter": "فصل 41", "duration_hms": "01:33:10"}, {"title": "روابط (۱۳)", "chapter": "فصل 42", "duration_hms": "01:24:23"}, {"title": "روابط (۱۴)", "chapter": "فصل 43", "duration_hms": "00:05:00"}, {"title": "گراف", "chapter": "فصل 44", "duration_hms": "01:43:56"}, {"title": "گراف (۲)", "chapter": "فصل 45", "duration_hms": "02:24:38"}, {"title": "گراف (۳)", "chapter": "فصل 46", "duration_hms": "01:07:44"}, {"title": "گراف (۴)", "chapter": "فصل 47", "duration_hms": "01:22:49"}, {"title": "گراف (۵)", "chapter": "فصل 48", "duration_hms": "01:04:33"}, {"title": "گراف (۶)", "chapter": "فصل 49", "duration_hms": "02:11:30"}, {"title": "گراف (۷)", "chapter": "فصل 50", "duration_hms": "01:59:39"}, {"title": "گراف (۸)", "chapter": "فصل 51", "duration_hms": "01:59:50"}, {"title": "گراف (۹)", "chapter": "فصل 52", "duration_hms": "01:28:53"}, {"title": "نظریه اعداد", "chapter": "فصل 53", "duration_hms": "01:00:59"}, {"title": "نظریه اعداد (۲)", "chapter": "فصل 54", "duration_hms": "02:01:10"}]}, {"name": "ساختمان داده", "sessions": [{"chapter": "فصل 1: مرتبه زمانی یک قطعه کد", "title": "جلسه اول بخش 1 (زمان اجرای یک قطعه کد ...)", "duration_hms": "02:29:52"}, {"chapter": "فصل 1: مرتبه زمانی یک قطعه کد", "title": "جلسه دوم بخش 1 (تعداد تکرار جمله ا...)", "duration_hms": "01:16:44"}, {"chapter": "فصل 1: مرتبه زمانی یک قطعه کد", "title": "جلسه دوم بخش 2 (ادامه مثال‌ها)", "duration_hms": "01:31:19"}, {"chapter": "فصل 2: رشد توابع", "title": "جلسه سوم بخش 1 (رشد توابع - بررسه...)", "duration_hms": "01:34:50"}, {"chapter": "فصل 2: رشد توابع", "title": "جلسه سوم بخش 2 (ادامه مثال‌های ...)", "duration_hms": "01:02:19"}, {"chapter": "فصل 2: رشد توابع", "title": "جلسه چهارم بخش 1 (ادامه مثال‌های ...)", "duration_hms": "01:05:42"}, {"chapter": "فصل 2: رشد توابع", "title": "جلسه چهارم بخش 2 (ادامه مثال‌ها ...)", "duration_hms": "01:15:24"}, {"chapter": "فصل 2: رشد توابع", "title": "جلسه چهارم بخش 3 (معرفی نمادهای ...)", "duration_hms": "00:39:46"}, {"chapter": "فصل 2: رشد توابع", "title": "جلسه پنجم بخش 1 (ادامه مثال‌های ...)", "duration_hms": "01:31:55"}, {"chapter": "فصل 2: رشد توابع", "title": "جلسه پنجم بخش 2 (ادامه مثال‌های ...)", "duration_hms": "00:48:08"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "فوق‌العاده دوم بخش 1 از درس گسسته...", "duration_hms": "01:30:01"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "فوق‌العاده دوم بخش 2 از درس گسسته...", "duration_hms": "01:24:41"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "فوق‌العاده دوم بخش 3 از درس گسسته...", "duration_hms": "01:30:21"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "فوق‌العاده دوم بخش 4 از درس گسسته...", "duration_hms": "01:29:25"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه ششم بخش 1 (شروع فصل بازگ...)", "duration_hms": "01:20:29"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه ششم بخش 2 (ادامه مثال‌های ...)", "duration_hms": "01:20:10"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه ششم بخش 3 (جایگذاری پایه...)", "duration_hms": "00:19:01"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه هفتم بخش 1 (ادامه مثال‌ها ...)", "duration_hms": "01:21:02"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه هفتم بخش 2 (ادامه مثال‌ها ...)", "duration_hms": "01:11:52"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه هفتم بخش 3 (رابطه بازگشتی ...)", "duration_hms": "00:25:37"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه هشتم بخش 1 (برج هانوی - ق...)", "duration_hms": "01:34:38"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه هشتم بخش 2 (ادامه مثال‌ها...)", "duration_hms": "01:37:14"}, {"chapter": "فصل 3: بازگشتی‌ها", "title": "جلسه نهم بخش 1 (ادامه مثال‌های د...)", "duration_hms": "02:07:38"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه دهم بخش 1 (شروع فصل درخت...)", "duration_hms": "01:28:37"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه دهم بخش 2 (تعداد درخت‌ها...)", "duration_hms": "01:30:43"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه یازدهم بخش 1 (انواع پیمایش...)", "duration_hms": "01:23:09"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه یازدهم بخش 2 (رسم درخت یا...)", "duration_hms": "02:00:14"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه دوازدهم بخش 1 (شیوه‌های ...)", "duration_hms": "01:33:41"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه دوازدهم بخش 2 (پیاده‌سازی ...)", "duration_hms": "01:38:39"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه سیزدهم بخش 1 (درج در BST...)", "duration_hms": "01:19:26"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه سیزدهم بخش 2 (الگوریتم یافت...)", "duration_hms": "01:15:25"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه چهاردهم بخش 1 (ادامه دوران)", "duration_hms": "01:31:48"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه چهاردهم بخش 2 (بررسی مرب...)", "duration_hms": "01:34:17"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه پانزدهم بخش 1 (به دست آو...)", "duration_hms": "01:43:44"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه پانزدهم بخش 2 (بهترین روش ...)", "duration_hms": "01:06:56"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه پانزدهم بخش 3 (ادامه حذف ...)", "duration_hms": "00:05:00"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه شانزدهم بخش 1 (درخت B-tr...)", "duration_hms": "01:29:06"}, {"chapter": "فصل 4: درخت‌های ساده و ویژه", "title": "جلسه شانزدهم بخش 2 (درخت Min ...)", "duration_hms": "01:42:52"}, {"chapter": "فصل 5: مرتب سازی", "title": "جلسه هفدهم بخش 1 (شروع فصل مر...)", "duration_hms": "00:47:31"}, {"chapter": "فصل 5: مرتب سازی", "title": "جلسه هفدهم بخش 2 (شروع فصل مر...)", "duration_hms": "01:36:02"}, {"chapter": "فصل 5: مرتب سازی", "title": "جلسه هفدهم بخش 3 (ادامه مرتب‌س...)", "duration_hms": "01:46:36"}, {"chapter": "فصل 5: مرتب سازی", "title": "جلسه هفدهم بخش 4 (تحلیل حالت ...)", "duration_hms": "01:16:14"}, {"chapter": "فصل 5: مرتب سازی", "title": "فوق‌العاده اول بخش 1 (رابطه بازگشت...)", "duration_hms": "01:25:50"}, {"chapter": "فصل 5: مرتب سازی", "title": "فوق‌العاده اول بخش 2 (شروع روش...)", "duration_hms": "02:10:08"}, {"chapter": "فصل 6: جستجو", "title": "فوق‌العاده اول بخش 3 ( روش‌های جستجو )", "duration_hms": "01:11:54"}, {"chapter": "فصل 7: درهم سازی", "title": "فوق‌العاده اول بخش 4 ( شروع درهم... )", "duration_hms": "01:04:16"}, {"chapter": "فصل 7: درهم سازی", "title": "فوق‌العاده اول بخش 5 ( متوسط زمان ... )", "duration_hms": "01:19:09"}, {"chapter": "فصل 7: درهم سازی", "title": "فوق‌العاده اول بخش 6 ( کاوش مربعی... )", "duration_hms": "01:04:09"}, {"chapter": "فصل 8: آرایه، ماتریس و لیست پیوندی", "title": "فوق‌العاده اول بخش 7 ( آرایه - آرایه 2... )", "duration_hms": "01:32:46"}, {"chapter": "فصل 8: آرایه، ماتریس و لیست پیوندی", "title": "فوق‌العاده اول بخش 8 ( لیست پیوند... )", "duration_hms": "01:40:09"}, {"chapter": "فصل 8: آرایه، ماتریس و لیست پیوندی", "title": "فوق‌العاده اول بخش 9 ( لیست پیوند... )", "duration_hms": "01:13:46"}, {"chapter": "فصل 8: آرایه، ماتریس و لیست پیوندی", "title": "فوق‌العاده اول بخش 10 ( ادامه مسئله... )", "duration_hms": "01:40:57"}]}, {"name": "سیستم عامل", "sessions": [{"title": "مقدمات", "chapter": "فصل 1", "duration_hms": "01:52:40"}, {"title": "مقدمات (۲)", "chapter": "فصل 2", "duration_hms": "01:44:49"}, {"title": "مقدمات (۳)", "chapter": "فصل 3", "duration_hms": "01:45:50"}, {"title": "مقدمات (۴)", "chapter": "فصل 4", "duration_hms": "02:25:08"}, {"title": "مقدمات (۵)", "chapter": "فصل 5", "duration_hms": "01:54:38"}, {"title": "مقدمات (۶)", "chapter": "فصل 6", "duration_hms": "01:21:14"}, {"title": "مقدمات (۷)", "chapter": "فصل 7", "duration_hms": "01:46:45"}, {"title": "مقدمات (۸)", "chapter": "فصل 8", "duration_hms": "01:32:39"}, {"title": "مقدمات (۹)", "chapter": "فصل 9", "duration_hms": "01:40:36"}, {"title": "مقدمات (۱۰)", "chapter": "فصل 10", "duration_hms": "01:31:09"}, {"title": "مقدمات (۱۱)", "chapter": "فصل 11", "duration_hms": "01:52:53"}, {"title": "فرآیندها", "chapter": "فصل 12", "duration_hms": "00:58:04"}, {"title": "فرآیندها (۲)", "chapter": "فصل 13", "duration_hms": "01:47:12"}, {"title": "فرآیندها (۳)", "chapter": "فصل 14", "duration_hms": "01:00:34"}, {"title": "فرآیندها (۴)", "chapter": "فصل 15", "duration_hms": "01:35:53"}, {"title": "فرآیندها (۵)", "chapter": "فصل 16", "duration_hms": "01:14:29"}, {"title": "فرآیندها (۶)", "chapter": "فصل 17", "duration_hms": "01:44:09"}, {"title": "عملیات روی فرآیندها", "chapter": "فصل 18", "duration_hms": "01:04:26"}, {"title": "عملیات روی فرآیندها (۲)", "chapter": "فصل 19", "duration_hms": "01:31:22"}, {"title": "عملیات روی فرآیندها (۳)", "chapter": "فصل 20", "duration_hms": "01:12:36"}, {"title": "عملیات روی فرآیندها (۴)", "chapter": "فصل 21", "duration_hms": "01:41:42"}, {"title": "عملیات روی فرآیندها (۵)", "chapter": "فصل 22", "duration_hms": "01:07:50"}, {"title": "ترد", "chapter": "فصل 23", "duration_hms": "01:38:44"}, {"title": "ترد (۲)", "chapter": "فصل 24", "duration_hms": "01:37:02"}, {"title": "ترد (۳)", "chapter": "فصل 25", "duration_hms": "01:28:56"}, {"title": "ترد (۴)", "chapter": "فصل 26", "duration_hms": "01:12:58"}, {"title": "ترد (۵)", "chapter": "فصل 27", "duration_hms": "01:42:21"}, {"title": "ترد (۶)", "chapter": "فصل 28", "duration_hms": "01:04:08"}, {"title": "زمان‌بندی", "chapter": "فصل 29", "duration_hms": "01:46:45"}, {"title": "زمان‌بندی (۲)", "chapter": "فصل 30", "duration_hms": "01:30:36"}, {"title": "زمان‌بندی (۳)", "chapter": "فصل 31", "duration_hms": "01:43:20"}, {"title": "زمان‌بندی (۴)", "chapter": "فصل 32", "duration_hms": "01:48:24"}, {"title": "زمان‌بندی (۵)", "chapter": "فصل 33", "duration_hms": "01:36:34"}, {"title": "زمان‌بندی (۶)", "chapter": "فصل 34", "duration_hms": "02:15:52"}, {"title": "حافظه‌ها", "chapter": "فصل 35", "duration_hms": "01:37:07"}, {"title": "حافظه‌ها (۲)", "chapter": "فصل 36", "duration_hms": "01:50:15"}, {"title": "حافظه‌ها (۳)", "chapter": "فصل 37", "duration_hms": "01:47:00"}, {"title": "حافظه‌ها (۴)", "chapter": "فصل 38", "duration_hms": "01:43:36"}, {"title": "حافظه‌ها (۵)", "chapter": "فصل 39", "duration_hms": "01:40:46"}, {"title": "حافظه‌ها (۶)", "chapter": "فصل 40", "duration_hms": "01:42:27"}, {"title": "حافظه‌ها (۷)", "chapter": "فصل 41", "duration_hms": "01:12:47"}, {"title": "حافظه‌ها (۸)", "chapter": "فصل 42", "duration_hms": "01:43:15"}, {"title": "حافظه‌ها (۹)", "chapter": "فصل 43", "duration_hms": "02:02:13"}, {"title": "حافظه‌ها (۱۰)", "chapter": "فصل 44", "duration_hms": "01:45:05"}, {"title": "حافظه‌ها (۱۱)", "chapter": "فصل 45", "duration_hms": "01:43:09"}, {"title": "همگام سازی فرآیندها", "chapter": "فصل 46", "duration_hms": "02:04:46"}, {"title": "همگام سازی فرآیندها (۲)", "chapter": "فصل 47", "duration_hms": "01:21:54"}, {"title": "همگام سازی فرآیندها (۳)", "chapter": "فصل 48", "duration_hms": "01:46:26"}, {"title": "همگام سازی فرآیندها (۴)", "chapter": "فصل 49", "duration_hms": "01:05:34"}, {"title": "همگام سازی فرآیندها (۵)", "chapter": "فصل 50", "duration_hms": "02:06:12"}, {"title": "بن بست", "chapter": "فصل 51", "duration_hms": "01:47:10"}, {"title": "بن بست (۲)", "chapter": "فصل 52", "duration_hms": "01:34:21"}, {"title": "بن بست (۳)", "chapter": "فصل 53", "duration_hms": "00:33:06"}, {"title": "بن بست (۴)", "chapter": "فصل 54", "duration_hms": "00:25:13"}, {"title": "هارد", "chapter": "فصل 55", "duration_hms": "01:41:50"}, {"title": "معماری سیستم عامل ها", "chapter": "فصل 56", "duration_hms": "01:56:08"}]}, {"name": "سیگنال و سیستم", "sessions": [{"title": "تعریف سیگنال معادلات خط و سهمی", "chapter": "فصل 1", "duration_hms": "00:29:58"}, {"title": "جمع روی سیگنال‌ها", "chapter": "فصل 2", "duration_hms": "00:33:42"}, {"title": "مشتق سیگنال پیوسته - تفاضل سیگنال...", "chapter": "فصل 3", "duration_hms": "00:27:39"}, {"title": "انتگرال زمان پیوسته - سیگمای سیگنال...", "chapter": "فصل 4", "duration_hms": "00:51:12"}, {"title": "انتگرال زمان پیوسته؛ یادآوری", "chapter": "فصل 5", "duration_hms": "01:28:30"}, {"title": "تبدیل متغیر، انتقال زمانی، وارونگی زمان", "chapter": "فصل 6", "duration_hms": "01:28:10"}, {"title": "کوچکترین مضرب مشترک، بزرگترین مق...", "chapter": "فصل 7", "duration_hms": "00:23:52"}, {"title": "توابع خاص پیوسته، کسینوسی تناوب...", "chapter": "فصل 8", "duration_hms": "01:03:49"}, {"title": "سیگنال‌های متناوب، تعریف، سیگنال‌های", "chapter": "فصل 9", "duration_hms": "01:04:43"}, {"title": "سیگنال‌های متناوب، دوره تناوب جمع...", "chapter": "فصل 10", "duration_hms": "00:52:59"}, {"title": "اعداد مختلط، یادآوری", "chapter": "فصل 11", "duration_hms": "00:33:55"}, {"title": "سیگنال‌های مختلط، فرم قطبی، فرم دکا...", "chapter": "فصل 12", "duration_hms": "00:43:24"}, {"title": "سیگنال نمایی پیوسته", "chapter": "فصل 13", "duration_hms": "00:56:48"}, {"title": "سیگنال نمایی گسسته", "chapter": "فصل 14", "duration_hms": "00:33:14"}, {"title": "سیگنال‌های مهم پیوسته، پله، مستطیل...", "chapter": "فصل 15", "duration_hms": "00:41:31"}, {"title": "چند مثال از سیگنال متناوب با سیگما", "chapter": "فصل 16", "duration_hms": "00:52:04"}, {"title": "سیگنال زوج و فرد؛ تعریف، تفکیک", "chapter": "فصل 17", "duration_hms": "01:15:45"}, {"title": "تصاعد هندسی، یادآوری", "chapter": "فصل 18", "duration_hms": "00:45:12"}, {"title": "سیگنال ضربه زمان پیوسته", "chapter": "فصل 19", "duration_hms": "00:38:50"}, {"title": "سیگنال ضربه زمان گسسته", "chapter": "فصل 20", "duration_hms": "00:16:46"}, {"title": "روابط مهم سیگنال ضربه", "chapter": "فصل 21", "duration_hms": "01:31:48"}, {"title": "قطار ضربه", "chapter": "فصل 22", "duration_hms": "00:06:27"}, {"title": "روابط مهم سیگنال پله", "chapter": "فصل 23", "duration_hms": "00:14:14"}, {"title": "توان و انرژی سیگنال", "chapter": "فصل 24", "duration_hms": "00:45:33"}, {"title": "نکات توان و انرژی", "chapter": "فصل 25", "duration_hms": "00:46:14"}, {"title": "فصل 1 تمرین 10 قسمت a", "chapter": "فصل 26", "duration_hms": "00:09:35"}, {"title": "فصل 1 تمرین 12", "chapter": "فصل 27", "duration_hms": "00:11:39"}, {"title": "فصل 1 تمرین 13", "chapter": "فصل 28", "duration_hms": "00:06:35"}, {"title": "فصل 1 تمرین 14", "chapter": "فصل 29", "duration_hms": "00:11:40"}, {"title": "معرفی سیستم", "chapter": "فصل 30", "duration_hms": "00:16:37"}, {"title": "خروجی سیستم زمان پیوسته با ترسیم", "chapter": "فصل 31", "duration_hms": "00:27:02"}, {"title": "خروجی سیستم زمان گسسته با ترسیم", "chapter": "فصل 32", "duration_hms": "00:15:09"}, {"title": "خروجی سیستم چند ضابطه‌ای ترسیم", "chapter": "فصل 33", "duration_hms": "00:13:58"}, {"title": "حالت‌های ورودی سیستم روش تستی", "chapter": "فصل 34", "duration_hms": "00:18:25"}, {"title": "دسته‌بندی سیستم یا توصیف‌ها", "chapter": "فصل 35", "duration_hms": "00:28:56"}, {"title": "اتصال سیستم‌ها", "chapter": "فصل 36", "duration_hms": "00:19:51"}, {"title": "سیستم بی حافظه", "chapter": "فصل 37", "duration_hms": "00:24:34"}, {"title": "سیستم علی", "chapter": "فصل 38", "duration_hms": "00:36:10"}, {"title": "تعریف سیستم خطی", "chapter": "فصل 39", "duration_hms": "00:17:45"}, {"title": "تشخیص سیستم خطی", "chapter": "فصل 40", "duration_hms": "00:33:06"}, {"title": "سیستم خطی علی", "chapter": "فصل 41", "duration_hms": "00:12:17"}, {"title": "سیستم مستقل از زمان TI", "chapter": "فصل 42", "duration_hms": "00:34:08"}, {"title": "سیستم پایدار", "chapter": "فصل 43", "duration_hms": "00:43:18"}, {"title": "سیستم معکوس پذیر", "chapter": "فصل 44", "duration_hms": "00:25:19"}, {"title": "محاسبه رابطه سیستم معکوس", "chapter": "فصل 45", "duration_hms": "00:22:07"}, {"title": "نقص معکوس‌پذیری با حذف ورودی", "chapter": "فصل 46", "duration_hms": "00:35:12"}, {"title": "اثبات معکوس‌پذیری با تابع پله به پله", "chapter": "فصل 47", "duration_hms": "00:35:09"}, {"title": "اثبات معکوس‌پذیری با رابطه معکوس", "chapter": "فصل 48", "duration_hms": "00:35:57"}, {"title": "سیستم پذیر هست یا نیست", "chapter": "فصل 49", "duration_hms": "00:07:32"}, {"title": "جمع کانولووشن", "chapter": "فصل 50", "duration_hms": "00:21:46"}, {"title": "جمع کانولوشن با ترسیم", "chapter": "فصل 51", "duration_hms": "00:26:05"}, {"title": "خواص جمع کانولوشن و محاسبه با خ...", "chapter": "فصل 52", "duration_hms": "00:37:19"}, {"title": "جمع کانولوشن متناوب", "chapter": "فصل 53", "duration_hms": "00:14:22"}, {"title": "انتگرال کانولوشن", "chapter": "فصل 54", "duration_hms": "00:16:17"}, {"title": "محاسبه انتگرال کانولوشن در یک نقطه فقط ...", "chapter": "فصل 55", "duration_hms": "00:31:26"}, {"title": "انتگرال کانولوشن با ترسیم برای تمام ذ...", "chapter": "فصل 56", "duration_hms": "00:33:57"}, {"title": "شکل تقریبی انتگرال کانولوشن", "chapter": "فصل 57", "duration_hms": "00:42:55"}, {"title": "خواص انتگرال کانولوشن", "chapter": "فصل 58", "duration_hms": "00:42:44"}, {"title": "انتگرال کانولوشن متناوب", "chapter": "فصل 59", "duration_hms": "00:13:11"}, {"title": "سیستم LTI", "chapter": "فصل 60", "duration_hms": "00:21:21"}, {"title": "روابط مهم سیستم LTI", "chapter": "فصل 61", "duration_hms": "00:28:43"}, {"title": "بلاک دیاگرام‌های هم‌ارز سیستم‌های ...", "chapter": "فصل 62", "duration_hms": "00:14:55"}, {"title": "خواص پاسخ ضربه LTI", "chapter": "فصل 63", "duration_hms": "00:45:52"}, {"title": "سری فوریه پیوسته، حوزه فرکانس", "chapter": "فصل 64", "duration_hms": "01:02:15"}, {"title": "سری فوریه گسسته", "chapter": "فصل 65", "duration_hms": "00:56:42"}, {"title": "سری فوریه سیگنالها مثلثاتی - نمایی", "chapter": "فصل 66", "duration_hms": "00:29:29"}, {"title": "بازسازی سیگنال از روی سری فوریه", "chapter": "فصل 67", "duration_hms": "00:12:59"}, {"title": "سری فوریه چند سیگنال مهم", "chapter": "فصل 68", "duration_hms": "00:20:26"}, {"title": "سری فوریه: خاصیت خطی و انتقال ز...", "chapter": "فصل 69", "duration_hms": "00:38:05"}, {"title": "سری فوریه: خاصیت انتقال فرکانسی", "chapter": "فصل 70", "duration_hms": "00:19:58"}, {"title": "سری فوریه: خاصیت وارونگی", "chapter": "فصل 71", "duration_hms": "00:09:02"}, {"title": "سری فوریه: خاصیت مزدوجی", "chapter": "فصل 72", "duration_hms": "00:13:02"}, {"title": "سری فوریه: خاصیت کانولوشن", "chapter": "فصل 73", "duration_hms": "00:14:15"}, {"title": "سری فوریه: خاصیت ضرب", "chapter": "فصل 74", "duration_hms": "00:16:18"}, {"title": "فوریه: خاصیت مشتق", "chapter": "فصل 75", "duration_hms": "00:27:10"}, {"title": "فوریه: خاصیت مشتق‌گیری در زمان ...", "chapter": "فصل 76", "duration_hms": "00:11:58"}, {"title": "فوریه: خاصیت انتگرال‌گیری در زمان", "chapter": "فصل 77", "duration_hms": "00:14:23"}, {"title": "سری فوریه سیگنال واقعی: زوج و فرد", "chapter": "فصل 78", "duration_hms": "00:13:18"}, {"title": "سری فوریه سیگنال حقیقی", "chapter": "فصل 79", "duration_hms": "00:31:57"}, {"title": "سری فوریه به تبدیل فوریه", "chapter": "فصل 80", "duration_hms": "00:33:21"}, {"title": "فرمول‌های تبدیل فوریه", "chapter": "فصل 81", "duration_hms": "00:13:08"}, {"title": "تبدیل فوریه سیگنال نمایی", "chapter": "فصل 82", "duration_hms": "00:22:43"}, {"title": "تبدیل فوریه پالس", "chapter": "فصل 83", "duration_hms": "00:17:25"}, {"title": "تبدیل فوریه سینک", "chapter": "فصل 84", "duration_hms": "00:15:08"}, {"title": "تبدیل فوریه ضربه پله", "chapter": "فصل 85", "duration_hms": "00:19:15"}, {"title": "خاصیت خطی", "chapter": "فصل 86", "duration_hms": "00:14:51"}, {"title": "خاصیت انتقال زمانی", "chapter": "فصل 87", "duration_hms": "00:21:50"}, {"title": "خاصیت انتقال فرکانسی", "chapter": "فصل 88", "duration_hms": "00:21:26"}, {"title": "خاصیت وارونگی و مزدوجی", "chapter": "فصل 89", "duration_hms": "00:10:49"}, {"title": "خاصیت مقیاس در زمان پیوسته", "chapter": "فصل 90", "duration_hms": "00:23:58"}, {"title": "گسترش زمان گسسته", "chapter": "فصل 91", "duration_hms": "00:24:12"}, {"title": "فشردگی زمان گسسته", "chapter": "فصل 92", "duration_hms": "00:16:17"}, {"title": "خاصیت ضرب", "chapter": "فصل 93", "duration_hms": "00:35:35"}, {"title": "خاصیت کانولوشن", "chapter": "فصل 94", "duration_hms": "00:12:18"}, {"title": "خاصیت مشتق‌گیری در زمان", "chapter": "فصل 95", "duration_hms": "00:16:56"}, {"title": "خاصیت انتگرال‌گیری در زمان", "chapter": "فصل 96", "duration_hms": "00:28:00"}, {"title": "خاصیت مشتق‌گیری در فرکانس", "chapter": "فصل 97", "duration_hms": "00:07:07"}, {"title": "رابطه پارسوال", "chapter": "فصل 98", "duration_hms": "00:18:04"}, {"title": "تبدیل فوریه سیگنال متناوب", "chapter": "فصل 99", "duration_hms": "00:24:09"}, {"title": "سیگنال‌های حقیقی؛ زوج و فرد", "chapter": "فصل 100", "duration_hms": "00:12:23"}, {"title": "دوگانگی تبدیل به تبدیل", "chapter": "فصل 101", "duration_hms": "00:28:31"}, {"title": "سیستم غیرخطی و تبدیل فوریه", "chapter": "فصل 102", "duration_hms": "00:19:17"}, {"title": "سیستم با تبدیل فوریه ...", "chapter": "فصل 103", "duration_hms": "00:28:23"}, {"title": "فرمول تبدیل لاپلاس", "chapter": "فصل 104", "duration_hms": "00:25:41"}, {"title": "رابطه تبدیل لاپلاس و تبدیل فوریه", "chapter": "فصل 105", "duration_hms": "00:15:58"}, {"title": "نمودار قطب و صفر", "chapter": "فصل 106", "duration_hms": "00:16:06"}, {"title": "خواص ناحیه همگرایی", "chapter": "فصل 107", "duration_hms": "00:26:04"}, {"title": "جدول تبدیل لاپلاس", "chapter": "فصل 108", "duration_hms": "00:05:00"}, {"title": "خاصیت خطی (۲)", "chapter": "فصل 109", "duration_hms": "00:19:27"}, {"title": "خاصیت انتقال زمانی و فرکانسی", "chapter": "فصل 110", "duration_hms": "00:16:32"}, {"title": "خاصیت وارونگی، مزدوجی، مقیاس ...", "chapter": "فصل 111", "duration_hms": "00:26:10"}, {"title": "کالوش/مشتق زمان، انتگرال زمان ...", "chapter": "فصل 112", "duration_hms": "00:21:09"}, {"title": "کالوش/ادامه؛ مثال‌ها ...", "chapter": "فصل 113", "duration_hms": "00:23:05"}, {"title": "عکس تبدیل لاپلاس", "chapter": "فصل 114", "duration_hms": "00:22:52"}, {"title": "سیگنال حقیقی و فرد، قضایا ...", "chapter": "فصل 115", "duration_hms": "00:17:03"}, {"title": "بسط کسرهای جزئی/یادآوری", "chapter": "فصل 116", "duration_hms": "00:20:12"}, {"title": "فرمول تبدیل Z", "chapter": "فصل 117", "duration_hms": "00:29:17"}, {"title": "رابطه تبدیل Z و تبدیل فوریه", "chapter": "فصل 118", "duration_hms": "00:33:00"}, {"title": "قطب‌ها و صفرها؛ خواص ناحیه هم...", "chapter": "فصل 119", "duration_hms": "00:27:10"}, {"title": "خاصیت مقیاس/معکوس زمانی ...", "chapter": "فصل 120", "duration_hms": "00:26:15"}, {"title": "خاصیت گسترش زمانی Z", "chapter": "فصل 121", "duration_hms": "00:35:44"}, {"title": "خاصیت ... (ادامه)", "chapter": "فصل 122", "duration_hms": "00:26:37"}, {"title": "خواص سیگنال‌های زوج و فرد، سیگنال حقیقی", "chapter": "فصل 123", "duration_hms": "00:42:28"}, {"title": "اعمال Z بر حوزه فرکانس", "chapter": "فصل 124", "duration_hms": "00:41:59"}, {"title": "عکس تبدیل؛ فرم استاندارد، بسط ک...", "chapter": "فصل 125", "duration_hms": "00:28:19"}, {"title": "عکس تبدیل Z؛ بسط توانی، تقسیم", "chapter": "فصل 126", "duration_hms": "00:37:33"}, {"title": "عکس تبدیل؛ فرم کلی", "chapter": "فصل 127", "duration_hms": "00:10:14"}, {"title": "محاسبه خروجی سیستم LTI با تبدیل...", "chapter": "فصل 128", "duration_hms": "00:41:21"}, {"title": "محاسبه پاسخ ضربه زمان گسسته م...", "chapter": "فصل 129", "duration_hms": "00:42:52"}, {"title": "محاسبه پاسخ ضربه زمان گسسته مع...", "chapter": "فصل 130", "duration_hms": "00:34:42"}, {"title": "محاسبه سیگنال خروجی", "chapter": "فصل 131", "duration_hms": "00:23:21"}, {"title": "محاسبه خروجی لحظه‌ای", "chapter": "فصل 132", "duration_hms": "00:15:16"}, {"title": "محاسبه عبوری متناوب / سیووسی...", "chapter": "فصل 133", "duration_hms": "00:42:44"}, {"title": "محاسبه عبوری ضربی ...", "chapter": "فصل 134", "duration_hms": "00:25:42"}, {"title": "تشخیص LTI بودن از حوزه فرکانس", "chapter": "فصل 135", "duration_hms": "00:18:21"}, {"title": "تشخیص علی بودن یک سیستم LTI ...", "chapter": "فصل 136", "duration_hms": "00:26:13"}, {"title": "تشخیص معکوس‌پذیری و محاسبه ...", "chapter": "فصل 137", "duration_hms": "00:33:15"}, {"title": "تشخیص پایداری سیستم LTI", "chapter": "فصل 138", "duration_hms": "00:30:54"}, {"title": "شرط لازم پایداری و علی بودن همزم...", "chapter": "فصل 139", "duration_hms": "00:19:08"}, {"title": "سیستم LTI توصیف‌شده با معادلات ...", "chapter": "فصل 140", "duration_hms": "00:22:11"}, {"title": "فیلتر", "chapter": "فصل 141", "duration_hms": "00:29:55"}, {"title": "نمونه‌برداری", "chapter": "فصل 142", "duration_hms": "00:17:57"}]}, {"name": "شبکه‌های کامپیوتری", "sessions": [{"title": "فصل 1: مفاهیم شبکه", "chapter": "فصل 1", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۲)", "chapter": "فصل 2", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۳)", "chapter": "فصل 3", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۴)", "chapter": "فصل 4", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۵)", "chapter": "فصل 5", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۶)", "chapter": "فصل 6", "duration_hms": "00:06:00"}, {"title": "فصل 1: مفاهیم شبکه (۷)", "chapter": "فصل 7", "duration_hms": "00:07:00"}, {"title": "فصل 1: مفاهیم شبکه (۸)", "chapter": "فصل 8", "duration_hms": "00:08:00"}, {"title": "فصل 1: مفاهیم شبکه (۹)", "chapter": "فصل 9", "duration_hms": "00:09:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۰)", "chapter": "فصل 10", "duration_hms": "00:10:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۱)", "chapter": "فصل 11", "duration_hms": "00:11:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۲)", "chapter": "فصل 12", "duration_hms": "00:12:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۳)", "chapter": "فصل 13", "duration_hms": "00:13:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۴)", "chapter": "فصل 14", "duration_hms": "00:14:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۵)", "chapter": "فصل 15", "duration_hms": "00:15:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۶)", "chapter": "فصل 16", "duration_hms": "00:16:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۷)", "chapter": "فصل 17", "duration_hms": "00:17:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۸)", "chapter": "فصل 18", "duration_hms": "00:18:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۹)", "chapter": "فصل 19", "duration_hms": "00:19:00"}, {"title": "فصل 1: مفاهیم شبکه (۲۰)", "chapter": "فصل 20", "duration_hms": "00:20:00"}, {"title": "فصل 1: مفاهیم شبکه (۲۱)", "chapter": "فصل 21", "duration_hms": "00:21:00"}, {"title": "فصل 2: لایه کاربرد", "chapter": "فصل 22", "duration_hms": "00:22:00"}, {"title": "فصل 2: لایه کاربرد (۲)", "chapter": "فصل 23", "duration_hms": "00:23:00"}, {"title": "فصل 2: لایه کاربرد (۳)", "chapter": "فصل 24", "duration_hms": "00:24:00"}, {"title": "فصل 2: لایه کاربرد (۴)", "chapter": "فصل 25", "duration_hms": "00:25:00"}, {"title": "فصل 2: لایه کاربرد (۵)", "chapter": "فصل 26", "duration_hms": "00:26:00"}, {"title": "فصل 2: لایه کاربرد (۶)", "chapter": "فصل 27", "duration_hms": "00:27:00"}, {"title": "فصل 3: لایه انتقال", "chapter": "فصل 28", "duration_hms": "00:28:00"}, {"title": "فصل 3: لایه انتقال (۲)", "chapter": "فصل 29", "duration_hms": "00:29:00"}, {"title": "فصل 3: لایه انتقال (۳)", "chapter": "فصل 30", "duration_hms": "00:30:00"}, {"title": "فصل 3: لایه انتقال (۴)", "chapter": "فصل 31", "duration_hms": "00:31:00"}, {"title": "فصل 3: لایه انتقال (۵)", "chapter": "فصل 32", "duration_hms": "00:32:00"}, {"title": "فصل 3: لایه انتقال (۶)", "chapter": "فصل 33", "duration_hms": "00:33:00"}, {"title": "فصل 3: لایه انتقال (۷)", "chapter": "فصل 34", "duration_hms": "00:34:00"}, {"title": "فصل 3: لایه انتقال (۸)", "chapter": "فصل 35", "duration_hms": "00:35:00"}, {"title": "فصل 4: لایه شبکه", "chapter": "فصل 36", "duration_hms": "00:36:00"}, {"title": "فصل 4: لایه شبکه (۲)", "chapter": "فصل 37", "duration_hms": "00:37:00"}, {"title": "فصل 4: لایه شبکه (۳)", "chapter": "فصل 38", "duration_hms": "00:38:00"}, {"title": "فصل 4: لایه شبکه (۴)", "chapter": "فصل 39", "duration_hms": "00:39:00"}, {"title": "فصل 4: لایه شبکه (۵)", "chapter": "فصل 40", "duration_hms": "00:40:00"}, {"title": "فصل 4: لایه شبکه (۶)", "chapter": "فصل 41", "duration_hms": "00:41:00"}, {"title": "فصل 4: لایه شبکه (۷)", "chapter": "فصل 42", "duration_hms": "00:42:00"}, {"title": "فصل 4: لایه شبکه (۸)", "chapter": "فصل 43", "duration_hms": "00:43:00"}, {"title": "فصل 4: لایه شبکه (۹)", "chapter": "فصل 44", "duration_hms": "00:44:00"}, {"title": "فصل 4: لایه شبکه (۱۰)", "chapter": "فصل 45", "duration_hms": "00:45:00"}, {"title": "فصل 4: لایه شبکه (۱۱)", "chapter": "فصل 46", "duration_hms": "00:46:00"}, {"title": "فصل 4: لایه شبکه (۱۲)", "chapter": "فصل 47", "duration_hms": "00:47:00"}, {"title": "فصل 5: لایه پیوند داده", "chapter": "فصل 48", "duration_hms": "00:48:00"}, {"title": "فصل 5: لایه پیوند داده (۲)", "chapter": "فصل 49", "duration_hms": "00:49:00"}, {"title": "فصل 5: لایه پیوند داده (۳)", "chapter": "فصل 50", "duration_hms": "00:50:00"}, {"title": "فصل 5: لایه پیوند داده (۴)", "chapter": "فصل 51", "duration_hms": "00:51:00"}, {"title": "فصل 5: لایه پیوند داده (۵)", "chapter": "فصل 52", "duration_hms": "00:52:00"}, {"title": "فصل 5: لایه پیوند داده (۶)", "chapter": "فصل 53", "duration_hms": "00:53:00"}, {"title": "فصل 5: لایه پیوند داده (۷)", "chapter": "فصل 54", "duration_hms": "00:54:00"}, {"title": "فصل 5: لایه پیوند داده (۸)", "chapter": "فصل 55", "duration_hms": "00:55:00"}, {"title": "فصل 5: لایه پیوند داده (۹)", "chapter": "فصل 56", "duration_hms": "00:56:00"}]}, {"name": "طراحی الگوریتم", "sessions": [{"title": "جلسه اول بخش 1", "chapter": "فصل 1", "duration_hms": "01:50:55"}, {"title": "جلسه اول بخش 2", "chapter": "فصل 2", "duration_hms": "01:16:09"}, {"title": "جلسه دوم بخش 1", "chapter": "فصل 3", "duration_hms": "01:18:44"}, {"title": "جلسه دوم بخش 2", "chapter": "فصل 4", "duration_hms": "01:21:24"}, {"title": "جلسه سوم بخش 1", "chapter": "فصل 5", "duration_hms": "01:16:30"}, {"title": "جلسه سوم بخش 2", "chapter": "فصل 6", "duration_hms": "01:42:06"}, {"title": "جلسه چهارم بخش 1", "chapter": "فصل 7", "duration_hms": "01:48:40"}, {"title": "جلسه چهارم بخش 2", "chapter": "فصل 8", "duration_hms": "00:27:55"}, {"title": "جلسه پنجم بخش 1", "chapter": "فصل 9", "duration_hms": "01:48:48"}, {"title": "جلسه پنجم بخش 2", "chapter": "فصل 10", "duration_hms": "01:10:38"}, {"title": "جلسه ششم بخش 1", "chapter": "فصل 11", "duration_hms": "01:46:21"}, {"title": "جلسه ششم بخش 1 (۲)", "chapter": "فصل 12", "duration_hms": "01:42:15"}, {"title": "جلسه هفتم بخش 1", "chapter": "فصل 13", "duration_hms": "01:29:51"}, {"title": "جلسه هفتم بخش 2", "chapter": "فصل 14", "duration_hms": "00:54:17"}, {"title": "جلسه هفتم بخش 3", "chapter": "فصل 15", "duration_hms": "01:05:09"}, {"title": "جلسه هفتم بخش 4", "chapter": "فصل 16", "duration_hms": "01:02:42"}, {"title": "جلسه هفتم بخش 5", "chapter": "فصل 17", "duration_hms": "01:02:06"}, {"title": "فوق‌العاده اول بخش 1", "chapter": "فصل 18", "duration_hms": "01:58:37"}, {"title": "فوق‌العاده اول بخش 2", "chapter": "فصل 19", "duration_hms": "01:19:52"}, {"title": "فوق‌العاده دوم بخش 1", "chapter": "فصل 20", "duration_hms": "01:09:46"}, {"title": "فوق‌العاده دوم بخش 2", "chapter": "فصل 21", "duration_hms": "03:11:47"}, {"title": "فوق‌العاده سوم بخش 1", "chapter": "فصل 22", "duration_hms": "01:49:28"}, {"title": "فوق‌العاده سوم بخش 2", "chapter": "فصل 23", "duration_hms": "01:26:32"}, {"title": "فوق‌العاده چهارم بخش 1", "chapter": "فصل 24", "duration_hms": "02:02:08"}, {"title": "فوق‌العاده چهارم بخش 2", "chapter": "فصل 25", "duration_hms": "02:08:52"}, {"title": "فوق‌العاده پنجم", "chapter": "فصل 26", "duration_hms": "02:01:43"}, {"title": "فوق‌العاده ششم", "chapter": "فصل 27", "duration_hms": "02:24:00"}, {"title": "فوق‌العاده هفتم", "chapter": "فصل 28", "duration_hms": "01:26:27"}]}, {"name": "مدار منطقی", "sessions": [{"title": "جلسه 1", "chapter": "فصل 1", "duration_hms": "01:09:07"}, {"title": "جلسه 2", "chapter": "فصل 2", "duration_hms": "01:17:48"}, {"title": "جلسه 3", "chapter": "فصل 3", "duration_hms": "02:08:32"}, {"title": "جلسه 4", "chapter": "فصل 4", "duration_hms": "01:07:40"}, {"title": "جلسه 5", "chapter": "فصل 5", "duration_hms": "01:24:46"}, {"title": "جلسه 6", "chapter": "فصل 6", "duration_hms": "00:28:58"}, {"title": "جلسه 7", "chapter": "فصل 7", "duration_hms": "01:13:26"}, {"title": "جلسه 8", "chapter": "فصل 8", "duration_hms": "01:16:59"}, {"title": "جلسه 9", "chapter": "فصل 9", "duration_hms": "01:03:22"}, {"title": "جلسه 10", "chapter": "فصل 10", "duration_hms": "01:18:30"}, {"title": "جلسه 11", "chapter": "فصل 11", "duration_hms": "01:09:39"}, {"title": "جلسه 12", "chapter": "فصل 12", "duration_hms": "01:31:01"}, {"title": "جلسه 13", "chapter": "فصل 13", "duration_hms": "01:48:51"}, {"title": "جلسه 14", "chapter": "فصل 14", "duration_hms": "01:36:25"}, {"title": "جلسه 15", "chapter": "فصل 15", "duration_hms": "00:05:00"}, {"title": "جلسه 16", "chapter": "فصل 16", "duration_hms": "01:40:40"}, {"title": "جلسه 17", "chapter": "فصل 17", "duration_hms": "00:17:22"}, {"title": "جلسه 18", "chapter": "فصل 18", "duration_hms": "01:27:45"}, {"title": "جلسه 19", "chapter": "فصل 19", "duration_hms": "01:46:56"}, {"title": "جلسه 20", "chapter": "فصل 20", "duration_hms": "01:02:32"}, {"title": "جلسه 21", "chapter": "فصل 21", "duration_hms": "01:38:04"}, {"title": "جلسه 22", "chapter": "فصل 22", "duration_hms": "01:24:47"}, {"title": "جلسه 23", "chapter": "فصل 23", "duration_hms": "01:35:43"}, {"title": "جلسه 24", "chapter": "فصل 24", "duration_hms": "01:35:59"}, {"title": "جلسه 25", "chapter": "فصل 25", "duration_hms": "01:19:14"}, {"title": "جلسه 26", "chapter": "فصل 26", "duration_hms": "01:42:08"}, {"title": "جلسه 27", "chapter": "فصل 27", "duration_hms": "00:25:59"}, {"title": "جلسه 28", "chapter": "فصل 28", "duration_hms": "02:19:17"}, {"title": "جلسه 29", "chapter": "فصل 29", "duration_hms": "01:16:43"}, {"title": "جلسه 30", "chapter": "فصل 30", "duration_hms": "01:22:16"}, {"title": "جلسه 31", "chapter": "فصل 31", "duration_hms": "00:05:00"}]}, {"name": "معماری کامپیوتر", "sessions": [{"title": "جلسه اول بخش 1", "chapter": "فصل 1", "duration_hms": "00:54:26"}, {"title": "جلسه اول بخش 2", "chapter": "فصل 2", "duration_hms": "00:40:21"}, {"title": "جلسه اول بخش 3", "chapter": "فصل 3", "duration_hms": "01:44:20"}, {"title": "جلسه اول بخش 4", "chapter": "فصل 4", "duration_hms": "01:11:02"}, {"title": "جلسه دوم بخش 1", "chapter": "فصل 5", "duration_hms": "01:37:11"}, {"title": "جلسه دوم بخش 2", "chapter": "فصل 6", "duration_hms": "01:21:56"}, {"title": "جلسه دوم بخش 3", "chapter": "فصل 7", "duration_hms": "01:18:43"}, {"title": "جلسه سوم بخش 1", "chapter": "فصل 8", "duration_hms": "01:45:46"}, {"title": "جلسه سوم بخش 2", "chapter": "فصل 9", "duration_hms": "02:25:09"}, {"title": "جلسه سوم بخش 3", "chapter": "فصل 10", "duration_hms": "01:25:23"}, {"title": "جلسه چهارم بخش 1", "chapter": "فصل 11", "duration_hms": "02:06:28"}, {"title": "جلسه چهارم بخش 2", "chapter": "فصل 12", "duration_hms": "02:13:12"}, {"title": "جلسه پنجم بخش 1", "chapter": "فصل 13", "duration_hms": "01:49:57"}, {"title": "جلسه پنجم بخش 2", "chapter": "فصل 14", "duration_hms": "02:09:47"}, {"title": "جلسه پنجم بخش 3", "chapter": "فصل 15", "duration_hms": "01:02:22"}, {"title": "جلسه پنجم بخش 4", "chapter": "فصل 16", "duration_hms": "00:32:26"}, {"title": "جلسه پنجم بخش 5", "chapter": "فصل 17", "duration_hms": "00:23:13"}, {"title": "جلسه ششم بخش 1", "chapter": "فصل 18", "duration_hms": "01:14:38"}, {"title": "جلسه ششم بخش 2", "chapter": "فصل 19", "duration_hms": "00:37:39"}, {"title": "جلسه ششم بخش 3", "chapter": "فصل 20", "duration_hms": "01:11:27"}, {"title": "جلسه ششم بخش 4", "chapter": "فصل 21", "duration_hms": "01:53:26"}, {"title": "جلسه ششم بخش 5", "chapter": "فصل 22", "duration_hms": "01:34:30"}, {"title": "جلسه هفتم بخش 1", "chapter": "فصل 23", "duration_hms": "01:40:55"}, {"title": "جلسه هفتم بخش 2", "chapter": "فصل 24", "duration_hms": "01:23:11"}, {"title": "جلسه هشتم بخش 1", "chapter": "فصل 25", "duration_hms": "01:37:04"}, {"title": "جلسه هشتم بخش 2", "chapter": "فصل 26", "duration_hms": "02:01:34"}, {"title": "جلسه نهم بخش 1", "chapter": "فصل 27", "duration_hms": "00:44:49"}, {"title": "جلسه نهم بخش 2", "chapter": "فصل 28", "duration_hms": "01:15:50"}, {"title": "جلسه نهم بخش 3", "chapter": "فصل 29", "duration_hms": "01:04:25"}, {"title": "جلسه نهم بخش 4", "chapter": "فصل 30", "duration_hms": "01:24:24"}, {"title": "جلسه نهم بخش 4 (۲)", "chapter": "فصل 31", "duration_hms": "00:27:21"}, {"title": "جلسه نهم بخش 5", "chapter": "فصل 32", "duration_hms": "01:04:36"}, {"title": "جلسه نهم بخش 6", "chapter": "فصل 33", "duration_hms": "01:25:33"}, {"title": "جلسه یازدهم بخش 1", "chapter": "فصل 34", "duration_hms": "00:51:41"}, {"title": "جلسه یازدهم بخش 2", "chapter": "فصل 35", "duration_hms": "01:05:40"}, {"title": "جلسه یازدهم بخش 3", "chapter": "فصل 36", "duration_hms": "02:03:19"}, {"title": "جلسه دوازدهم بخش 1", "chapter": "فصل 37", "duration_hms": "00:24:06"}, {"title": "جلسه دوازدهم بخش 2", "chapter": "فصل 38", "duration_hms": "00:22:49"}, {"title": "جلسه دوازدهم بخش 3", "chapter": "فصل 39", "duration_hms": "01:12:26"}, {"title": "جلسه دوازدهم بخش 4", "chapter": "فصل 40", "duration_hms": "01:17:22"}, {"title": "جلسه دوازدهم بخش 5", "chapter": "فصل 41", "duration_hms": "01:11:57"}, {"title": "جلسه سیزدهم بخش 1", "chapter": "فصل 42", "duration_hms": "00:58:42"}, {"title": "جلسه سیزدهم بخش 2", "chapter": "فصل 43", "duration_hms": "01:24:56"}, {"title": "جلسه سیزدهم بخش 3", "chapter": "فصل 44", "duration_hms": "01:28:20"}, {"title": "جلسه سیزدهم بخش 4", "chapter": "فصل 45", "duration_hms": "00:38:04"}, {"title": "جلسه چهاردهم", "chapter": "فصل 46", "duration_hms": "02:56:00"}, {"title": "جلسه دهم بخش 1", "chapter": "فصل 47", "duration_hms": "02:07:41"}, {"title": "جلسه دهم بخش 2", "chapter": "فصل 48", "duration_hms": "02:26:05"}, {"title": "جلسه دهم بخش 3", "chapter": "فصل 49", "duration_hms": "01:40:41"}, {"title": "جلسه دهم بخش 4", "chapter": "فصل 50", "duration_hms": "00:51:02"}, {"title": "جلسه دهم بخش 5", "chapter": "فصل 51", "duration_hms": "00:47:09"}, {"title": "جلسه دهم بخش 6", "chapter": "فصل 52", "duration_hms": "00:20:10"}, {"title": "جلسه دهم بخش 7", "chapter": "فصل 53", "duration_hms": "01:17:29"}, {"title": "جلسه اول تکمیلی بخش 1", "chapter": "فصل 54", "duration_hms": "01:13:59"}, {"title": "جلسه اول تکمیلی بخش 2", "chapter": "فصل 55", "duration_hms": "00:22:00"}, {"title": "جلسه اول تکمیلی بخش 3", "chapter": "فصل 56", "duration_hms": "01:44:50"}, {"title": "جلسه اول تکمیلی بخش 4", "chapter": "فصل 57", "duration_hms": "01:02:20"}, {"title": "جلسه دوم تکمیلی بخش 1", "chapter": "فصل 58", "duration_hms": "01:53:00"}, {"title": "جلسه دوم تکمیلی بخش 2", "chapter": "فصل 59", "duration_hms": "01:06:04"}, {"title": "جلسه دوم تکمیلی بخش 3", "chapter": "فصل 60", "duration_hms": "01:22:28"}, {"title": "جلسه دوم تکمیلی بخش 4", "chapter": "فصل 61", "duration_hms": "00:27:12"}, {"title": "کامپیوتر 99", "chapter": "فصل 62", "duration_hms": "02:00:40"}, {"title": "کامپیوتر 1400 بخش 1", "chapter": "فصل 63", "duration_hms": "00:43:38"}, {"title": "کامپیوتر 1400 بخش 2", "chapter": "فصل 64", "duration_hms": "00:32:45"}, {"title": "کامپیوتر 1401", "chapter": "فصل 65", "duration_hms": "00:25:30"}, {"title": "کامپیوتر 1402", "chapter": "فصل 66", "duration_hms": "00:05:00"}, {"title": "کامپیوتر 1403", "chapter": "فصل 67", "duration_hms": "00:05:00"}]}, {"name": "نظریهٔ زبان‌ها و ماشین‌ها", "sessions": [{"chapter": "پیش‌نیاز و معرفی", "title": "جلسه اول بخش 1: درباره درس نظریه ...", "duration_hms": "01:00:00"}, {"chapter": "پیش‌نیاز و معرفی", "title": "جلسه اول بخش 2: نظریه مجموعه ها و...", "duration_hms": "01:00:00"}, {"chapter": "پیش‌نیاز و معرفی", "title": "جلسه دوم بخش 1: رابطه و تابع و شما...", "duration_hms": "01:00:00"}, {"chapter": "پیش‌نیاز و معرفی", "title": "جلسه دوم بخش 2: گراف و درخت، تو...", "duration_hms": "01:00:00"}, {"chapter": "فصل 1: مفاهیم اولیه رشته، زبان و عملگرها", "title": "رشته ها", "duration_hms": "01:00:00"}, {"chapter": "فصل 1: مفاهیم اولیه رشته، زبان و عملگرها", "title": "زبان ها", "duration_hms": "01:00:00"}, {"chapter": "فصل 1: مفاهیم اولیه رشته، زبان و عملگرها", "title": "توصیف یک زبان", "duration_hms": "01:00:00"}, {"chapter": "فصل 1: مفاهیم اولیه رشته، زبان و عملگرها", "title": "سلسله مراتب چامسکی", "duration_hms": "01:00:00"}, {"chapter": "فصل 2: اتوماتای متناهی", "title": "پذیرنده حالت متناهی قطعی (DFA)", "duration_hms": "01:00:00"}, {"chapter": "فصل 2: اتوماتای متناهی", "title": "DFA کمینه", "duration_hms": "01:00:00"}, {"chapter": "فصل 2: اتوماتای متناهی", "title": "زبان منظم", "duration_hms": "01:00:00"}, {"chapter": "فصل 2: اتوماتای متناهی", "title": "پذیرنده حالت متناهی غیرقطعی (NF...)", "duration_hms": "01:00:00"}, {"chapter": "فصل 3: عبارت منظم و گرامر منظم", "title": "عبارت منظم (Regular Expression)", "duration_hms": "01:00:00"}, {"chapter": "فصل 3: عبارت منظم و گرامر منظم", "title": "زبان منظم و RE", "duration_hms": "01:00:00"}, {"chapter": "فصل 3: عبارت منظم و گرامر منظم", "title": "گرامر منظم (Regular Grammar)", "duration_hms": "01:00:00"}, {"chapter": "فصل 4: ویژگی‌های زبان‌های منظم", "title": "خواص بستاری زبان‌های منظم", "duration_hms": "01:00:00"}, {"chapter": "فصل 4: ویژگی‌های زبان‌های منظم", "title": "روش‌های تشخیص منظم بودن یک ...", "duration_hms": "01:00:00"}, {"chapter": "فصل 4: ویژگی‌های زبان‌های منظم", "title": "روش‌های تشخیص منظم بودن یک ز...", "duration_hms": "01:00:00"}, {"chapter": "فصل 4: ویژگی‌های زبان‌های منظم", "title": "مسائل تصمیم‌پذیر در زبان‌های منظم", "duration_hms": "01:00:00"}, {"chapter": "فصل 5: زبان‌های مستقل از متن", "title": "گرامرهای مستقل از متن", "duration_hms": "01:00:00"}, {"chapter": "فصل 5: زبان‌های مستقل از متن", "title": "پارس و عضویت یک رشته", "duration_hms": "01:00:00"}, {"chapter": "فصل 5: زبان‌های مستقل از متن", "title": "ابهام در گرامرها و زبان‌ها", "duration_hms": "01:00:00"}, {"chapter": "فصل 6: ساده‌سازی گرامرهای مستقل از متن", "title": "جلسه سیزدهم بخش 1: ساده‌سازی گ...", "duration_hms": "01:00:00"}, {"chapter": "فصل 6: ساده‌سازی گرامرهای مستقل از متن", "title": "جلسه سیزدهم بخش 2: ساده‌سازی گ...", "duration_hms": "01:00:00"}, {"chapter": "فصل 7: ماشین‌های پشته‌ای", "title": "جلسه چهاردهم بخش 1: ماشین های...", "duration_hms": "01:00:00"}, {"chapter": "فصل 7: ماشین‌های پشته‌ای", "title": "جلسه چهاردهم بخش 2: ماشین های...", "duration_hms": "01:00:00"}, {"chapter": "فصل 8: ویژگی‌های بستاری زبان‌های مستقل از متن", "title": "جلسه پانزدهم بخش 1: بخش اول", "duration_hms": "01:00:00"}, {"chapter": "فصل 8: ویژگی‌های بستاری زبان‌های مستقل از متن", "title": "جلسه پانزدهم بخش 2: بخش دوم", "duration_hms": "01:00:00"}, {"chapter": "فصل 8: ویژگی‌های بستاری زبان‌های مستقل از متن", "title": "جلسه شانزدهم بخش 1: تصمیم پذیر", "duration_hms": "01:00:00"}, {"chapter": "فصل 9: ماشین های تورینگ", "title": "جلسه شانزدهم بخش 2: معرفی ماش...", "duration_hms": "01:00:00"}, {"chapter": "فصل 9: ماشین های تورینگ", "title": "جلسه شانزدهم بخش 3: تورینگ محا...", "duration_hms": "01:00:00"}, {"chapter": "فصل 9: ماشین های تورینگ", "title": "جلسه هفدهم بخش 1: نسخه های م...", "duration_hms": "01:00:00"}, {"chapter": "فصل 9: ماشین های تورینگ", "title": "جلسه هفدهم بخش 2: کدینگ تورین...", "duration_hms": "01:00:00"}, {"chapter": "فصل 9: ماشین های تورینگ", "title": "جلسه هفدهم بخش 3: LBA", "duration_hms": "01:00:00"}, {"chapter": "فصل 10: سلسله مراتب زبان ها و ویژگی ها", "title": "جلسه هجدهم بخش 1: بخش اول", "duration_hms": "01:00:00"}, {"chapter": "فصل 10: سلسله مراتب زبان ها و ویژگی ها", "title": "جلسه هجدهم بخش 2: بخش دوم", "duration_hms": "01:00:00"}, {"chapter": "", "title": "جلسهٔ تکمیلی نظریهٔ زبان‌ها و ماشین‌ها #1", "duration_hms": "01:00:00"}, {"chapter": "", "title": "جلسهٔ تکمیلی نظریهٔ زبان‌ها و ماشین‌ها #2", "duration_hms": "01:00:00"}, {"chapter": "", "title": "جلسهٔ تکمیلی نظریهٔ زبان‌ها و ماشین‌ها #3", "duration_hms": "01:00:00"}, {"chapter": "", "title": "جلسهٔ تکمیلی نظریهٔ زبان‌ها و ماشین‌ها #4", "duration_hms": "01:00:00"}]}, {"name": "هوش مصنوعی", "sessions": [{"title": "فصل 1: مقدمات", "chapter": "فصل 1", "duration_hms": "00:05:00"}, {"title": "فصل 1: مقدمات (۲)", "chapter": "فصل 2", "duration_hms": "00:05:00"}, {"title": "فصل 2: عامل‌های هوشمند", "chapter": "فصل 3", "duration_hms": "00:05:00"}, {"title": "فصل 2: عامل‌های هوشمند (۲)", "chapter": "فصل 4", "duration_hms": "00:05:00"}, {"title": "فصل 2: عامل‌های هوشمند (۳)", "chapter": "فصل 5", "duration_hms": "00:05:00"}, {"title": "فصل 2: عامل‌های هوشمند (۴)", "chapter": "فصل 6", "duration_hms": "00:06:00"}, {"title": "فصل 2: عامل‌های هوشمند (۵)", "chapter": "فصل 7", "duration_hms": "00:07:00"}, {"title": "فصل 2: عامل‌های هوشمند (۶)", "chapter": "فصل 8", "duration_hms": "00:08:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو", "chapter": "فصل 9", "duration_hms": "00:09:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو (۲)", "chapter": "فصل 10", "duration_hms": "00:10:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو (۳)", "chapter": "فصل 11", "duration_hms": "00:11:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو (۴)", "chapter": "فصل 12", "duration_hms": "00:12:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو (۵)", "chapter": "فصل 13", "duration_hms": "00:13:00"}, {"title": "فصل 4: جستجوی ناآگاهانه", "chapter": "فصل 14", "duration_hms": "00:14:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۲)", "chapter": "فصل 15", "duration_hms": "00:15:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۳)", "chapter": "فصل 16", "duration_hms": "00:16:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۴)", "chapter": "فصل 17", "duration_hms": "00:17:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۵)", "chapter": "فصل 18", "duration_hms": "00:18:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۶)", "chapter": "فصل 19", "duration_hms": "00:19:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۷)", "chapter": "فصل 20", "duration_hms": "00:20:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۸)", "chapter": "فصل 21", "duration_hms": "00:21:00"}, {"title": "فصل 5: جستجوی آگاهانه", "chapter": "فصل 22", "duration_hms": "00:22:00"}, {"title": "فصل 5: جستجوی آگاهانه (۲)", "chapter": "فصل 23", "duration_hms": "00:23:00"}, {"title": "فصل 5: جستجوی آگاهانه (۳)", "chapter": "فصل 24", "duration_hms": "00:24:00"}, {"title": "فصل 5: جستجوی آگاهانه (۴)", "chapter": "فصل 25", "duration_hms": "00:25:00"}, {"title": "فصل 5: جستجوی آگاهانه (۵)", "chapter": "فصل 26", "duration_hms": "00:26:00"}, {"title": "فصل 5: جستجوی آگاهانه (۶)", "chapter": "فصل 27", "duration_hms": "00:27:00"}, {"title": "فصل 5: جستجوی آگاهانه (۷)", "chapter": "فصل 28", "duration_hms": "00:28:00"}, {"title": "فصل 5: جستجوی آگاهانه (۸)", "chapter": "فصل 29", "duration_hms": "00:29:00"}, {"title": "فصل 6: جستجوی محلی", "chapter": "فصل 30", "duration_hms": "00:30:00"}, {"title": "فصل 6: جستجوی محلی (۲)", "chapter": "فصل 31", "duration_hms": "00:31:00"}, {"title": "فصل 6: جستجوی محلی (۳)", "chapter": "فصل 32", "duration_hms": "00:32:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت)", "chapter": "فصل 33", "duration_hms": "00:33:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۲)", "chapter": "فصل 34", "duration_hms": "00:34:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۳)", "chapter": "فصل 35", "duration_hms": "00:35:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۴)", "chapter": "فصل 36", "duration_hms": "00:36:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۵)", "chapter": "فصل 37", "duration_hms": "00:37:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۶)", "chapter": "فصل 38", "duration_hms": "00:38:00"}, {"title": "فصل 8: بازی‌ها", "chapter": "فصل 39", "duration_hms": "00:39:00"}, {"title": "فصل 8: بازی‌ها (۲)", "chapter": "فصل 40", "duration_hms": "00:40:00"}, {"title": "فصل 8: بازی‌ها (۳)", "chapter": "فصل 41", "duration_hms": "00:41:00"}, {"title": "فصل 9: منطق گزاره‌ای", "chapter": "فصل 42", "duration_hms": "00:42:00"}, {"title": "فصل 9: منطق گزاره‌ای (۲)", "chapter": "فصل 43", "duration_hms": "00:43:00"}, {"title": "فصل 10: منطق مرتبه اول", "chapter": "فصل 44", "duration_hms": "00:47:00"}, {"title": "فصل 10: منطق مرتبه اول (۲)", "chapter": "فصل 45", "duration_hms": "00:48:00"}, {"title": "فصل 11: استنتاج در منطق مرتبه اول", "chapter": "فصل 46", "duration_hms": "00:49:00"}, {"title": "فصل 11: استنتاج در منطق مرتبه اول (۲)", "chapter": "فصل 47", "duration_hms": "00:50:00"}, {"title": "فصل 12: عدم قطعیت", "chapter": "فصل 48", "duration_hms": "00:51:00"}]}, {"name": "پایگاه‌داده", "sessions": [{"chapter": "فصل 1: آشنایی با پایگاه داده و پرس و جو", "title": "تعریف پایگاه داده", "duration_hms": "37:42:00"}, {"chapter": "فصل 1: آشنایی با پایگاه داده و پرس و جو", "title": "سازماندهی داده ها در جدول ها", "duration_hms": "24:30:00"}, {"chapter": "فصل 1: آشنایی با پایگاه داده و پرس و جو", "title": "بازیابی اطلاعات با select", "duration_hms": "01:07:58"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "مثال با عملکرد انتخاب، پرتو، تفاضل اج...", "duration_hms": "44:35:00"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "مثال با عملکرد ضرب دکارتی، شرط ضرب", "duration_hms": "41:48:00"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "رابطه، اسکما", "duration_hms": "37:39:00"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "عملگرهای اصلی انتخاب، پرتو، اجتماع", "duration_hms": "46:28:00"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "عملگر اصلی نامگذاری", "duration_hms": "18:49:00"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "قید قوانین جامعیت", "duration_hms": "01:27:40"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "مثال عملکرد نامگذاری، عملگرهای فرعی", "duration_hms": "01:32:52"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "جمع‌ها و کلیدها", "duration_hms": "19:12:00"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "عملگر تقسیم", "duration_hms": "01:13:09"}, {"chapter": "فصل 2: جبر رابطه‌ای (RA)", "title": "min max", "duration_hms": "26:44:00"}, {"chapter": "فصل 3: SQL", "title": "دسته‌بندی دستورات 1 تا 3", "duration_hms": "28:48:00"}, {"chapter": "فصل 3: SQL", "title": "انواع داده‌ها، create database، cre...", "duration_hms": "01:27:45"}, {"chapter": "فصل 3: SQL", "title": "دستور Insert و Alter و Drop و Delete", "duration_hms": "01:29:04"}, {"chapter": "فصل 3: SQL", "title": "نام‌گذاری مجدد با AS ص 18 تا 23", "duration_hms": "54:07:00"}, {"chapter": "فصل 3: SQL", "title": "عملگرهای Is Null. Is not. Between", "duration_hms": "01:05:52"}, {"chapter": "فصل 3: SQL", "title": "عملگرهای all، some ص 27 تا 28", "duration_hms": "01:20:19"}, {"chapter": "فصل 3: SQL", "title": "شروع exists ص 29", "duration_hms": "26:49:00"}, {"chapter": "فصل 3: SQL", "title": "زیر پرس و جوی متصل و تقسیم ص ...", "duration_hms": "53:36:00"}, {"chapter": "فصل 3: SQL", "title": "مرور و ادامه تقسیم، توابع عددی ص ...", "duration_hms": "01:21:46"}, {"chapter": "فصل 3: SQL", "title": "الحاق، group by ص 37 تا 44", "duration_hms": "01:31:27"}, {"chapter": "فصل 3: SQL", "title": "شرط با having، group by و تقسیم با", "duration_hms": "01:32:39"}, {"chapter": "فصل 3: SQL", "title": "ایندکس ص 52 تا 54", "duration_hms": "33:32:00"}, {"chapter": "فصل 3: SQL", "title": "تعریف محدودیت‌ها ص 54 تا 56", "duration_hms": "01:14:12"}, {"chapter": "فصل 4: ER", "title": "موجودیت، خصیصه، ارتباط ص 1 تا 10", "duration_hms": "01:49:38"}, {"chapter": "فصل 4: ER", "title": "ارتباط چند به چند و یک به یک ص 1...", "duration_hms": "01:35:04"}, {"chapter": "فصل 4: ER", "title": "ارتباط درجه 1 و درجه 3 ص 16 تا 19", "duration_hms": "47:20:00"}, {"chapter": "فصل 4: ER", "title": "مقدمه ارتباط کلی اختصاصی ص 19 ...", "duration_hms": "34:23:00"}, {"chapter": "فصل 4: ER", "title": "ارتباط کلی اختصاصی ص 19 تا 27", "duration_hms": "01:28:16"}, {"chapter": "فصل 4: ER", "title": "پیاده‌سازی خصیصه ارتباط، نمودار داد...", "duration_hms": "01:12:10"}, {"chapter": "فصل 4: ER", "title": "پیاده‌سازی موجودیت ضعیف، صفت", "duration_hms": "01:29:01"}, {"chapter": "فصل 4: ER", "title": "ارث‌بری چند گانه ص 38 تا 40", "duration_hms": "20:30:00"}, {"chapter": "فصل 5: نرمال فرم NF", "title": "وابستگی تابعی، بستن، قواعد آرمسترا...", "duration_hms": "46:35:00"}, {"chapter": "فصل 5: نرمال فرم NF", "title": "الگوریتم بستن، تعریف کلید با بستن", "duration_hms": "01:31:46"}, {"chapter": "فصل 5: نرمال فرم NF", "title": "پیدا کردن کلید، ص 13 تا 17", "duration_hms": "58:23:00"}, {"chapter": "فصل 5: نرمال فرم NF", "title": "فرم کاهش ناپذیر، مجموعه‌های معاد...", "duration_hms": "01:31:13"}, {"chapter": "فصل 5: نرمال فرم NF", "title": "آرما‌ئی 1NF و 2NF و 3NF ص 25", "duration_hms": "01:31:22"}, {"chapter": "فصل 5: نرمال فرم NF", "title": "BCNF ص 32 تا 35", "duration_hms": "01:37:53"}, {"chapter": "فصل 5: نرمال فرم NF", "title": "تعریف دوم BCNF، مشکلات نرمال سا...", "duration_hms": "01:22:45"}, {"chapter": "فصل 6: مقدمات (basic)", "title": "مدیریت فایل سیستمی، ویژگی‌های پا...", "duration_hms": "01:11:59"}, {"chapter": "فصل 6: مقدمات (basic)", "title": "کاربران پایگاه داده ص 6 تا 8", "duration_hms": "35:50:00"}, {"chapter": "فصل 6: مقدمات (basic)", "title": "کاتالوگ، کوئری، مدل‌های داده، انتزاع", "duration_hms": "01:49:43"}, {"chapter": "ضمیمه 1", "title": "MVD-4NF جلسه شانزدهم بخش 2", "duration_hms": "01:23:33"}, {"chapter": "ضمیمه 2", "title": "TRC DRC جلسه هفدهم بخش 2", "duration_hms": "01:38:40"}, {"chapter": "ضمیمه 3", "title": "مقدمات شاخص‌گذاری ص 1 تا 6", "duration_hms": "01:26:40"}, {"chapter": "ضمیمه 3", "title": "شاخص‌گذاری hash و B+Tree و bit...", "duration_hms": "01:09:56"}]}, {"name": "نکته و تست الکترونیک دیجیتال", "sessions": [{"title": "جلسه اول بخش 1", "chapter": "فصل 1", "duration_hms": "01:50:33"}, {"title": "جلسه اول بخش 2", "chapter": "فصل 2", "duration_hms": "01:17:12"}, {"title": "جلسه دوم بخش 1", "chapter": "فصل 3", "duration_hms": "01:47:07"}, {"title": "جلسه دوم بخش 2", "chapter": "فصل 4", "duration_hms": "01:44:04"}, {"title": "جلسه سوم بخش 1", "chapter": "فصل 5", "duration_hms": "00:39:17"}, {"title": "جلسه سوم بخش 2", "chapter": "فصل 6", "duration_hms": "01:15:18"}, {"title": "جلسه چهارم بخش 1", "chapter": "فصل 7", "duration_hms": "01:45:21"}, {"title": "جلسه چهارم بخش 2", "chapter": "فصل 8", "duration_hms": "01:19:49"}, {"title": "جلسه پنجم بخش 1", "chapter": "فصل 9", "duration_hms": "01:33:20"}, {"title": "جلسه پنجم بخش 2", "chapter": "فصل 10", "duration_hms": "01:21:06"}, {"title": "جلسه ششم", "chapter": "فصل 11", "duration_hms": "02:06:44"}, {"title": "جلسه هفتم بخش 1", "chapter": "فصل 12", "duration_hms": "01:26:23"}, {"title": "جلسه هفتم بخش 2", "chapter": "فصل 13", "duration_hms": "01:18:18"}, {"title": "جلسه هشتم بخش 1", "chapter": "فصل 14", "duration_hms": "01:31:48"}, {"title": "جلسه هشتم بخش 2", "chapter": "فصل 15", "duration_hms": "01:03:19"}, {"title": "جلسه نهم", "chapter": "فصل 16", "duration_hms": "02:36:44"}, {"title": "جلسه دهم بخش 1", "chapter": "فصل 17", "duration_hms": "01:33:41"}, {"title": "جلسه دهم بخش 2", "chapter": "فصل 18", "duration_hms": "01:15:36"}, {"title": "جلسه یازدهم بخش 1", "chapter": "فصل 19", "duration_hms": "01:51:53"}, {"title": "جلسه یازدهم بخش 2", "chapter": "فصل 20", "duration_hms": "01:27:32"}, {"title": "جلسه دوازدهم بخش 1", "chapter": "فصل 21", "duration_hms": "00:37:16"}, {"title": "جلسه دوازدهم بخش 2", "chapter": "فصل 22", "duration_hms": "00:53:26"}, {"title": "جلسه دوازدهم بخش 3", "chapter": "فصل 23", "duration_hms": "01:05:48"}, {"title": "جلسه سیزدهم بخش 1", "chapter": "فصل 24", "duration_hms": "01:28:10"}, {"title": "جلسه سیزدهم بخش 2", "chapter": "فصل 25", "duration_hms": "01:00:40"}, {"title": "جلسه چهاردهم بخش 1", "chapter": "فصل 26", "duration_hms": "01:32:01"}, {"title": "جلسه چهاردهم بخش 2", "chapter": "فصل 27", "duration_hms": "00:55:13"}, {"title": "جلسه پانزدهم بخش 1", "chapter": "فصل 28", "duration_hms": "01:33:12"}, {"title": "جلسه پانزدهم بخش 2", "chapter": "فصل 29", "duration_hms": "01:30:28"}, {"title": "جلسه شانزدهم", "chapter": "فصل 30", "duration_hms": "01:40:02"}]}, {"name": "نکته و تست ریاضیات گسسته", "sessions": [{"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید)", "chapter": "فصل 1", "duration_hms": "01:30:01"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۲)", "chapter": "فصل 2", "duration_hms": "01:24:41"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۳)", "chapter": "فصل 3", "duration_hms": "01:30:21"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۴)", "chapter": "فصل 4", "duration_hms": "01:29:25"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۵)", "chapter": "فصل 5", "duration_hms": "01:31:42"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۶)", "chapter": "فصل 6", "duration_hms": "01:56:59"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۷)", "chapter": "فصل 7", "duration_hms": "01:35:20"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۸)", "chapter": "فصل 8", "duration_hms": "01:33:33"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۹)", "chapter": "فصل 9", "duration_hms": "00:23:44"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۰)", "chapter": "فصل 10", "duration_hms": "01:52:42"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۱)", "chapter": "فصل 11", "duration_hms": "01:27:11"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۲)", "chapter": "فصل 12", "duration_hms": "01:04:30"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۳)", "chapter": "فصل 13", "duration_hms": "01:03:39"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۴)", "chapter": "فصل 14", "duration_hms": "01:03:52"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۵)", "chapter": "فصل 15", "duration_hms": "01:20:55"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۶)", "chapter": "فصل 16", "duration_hms": "01:16:42"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۷)", "chapter": "فصل 17", "duration_hms": "01:26:58"}, {"title": "شمارش، مجموعه‌ها، توابع (عنوان دقیق را تأیید کنید) (۱۸)", "chapter": "فصل 18", "duration_hms": "01:03:57"}, {"title": "بازگشتی‌ها", "chapter": "فصل 19", "duration_hms": "01:40:10"}, {"title": "بازگشتی‌ها (۲)", "chapter": "فصل 20", "duration_hms": "01:21:48"}, {"title": "بازگشتی‌ها (۳)", "chapter": "فصل 21", "duration_hms": "01:16:46"}, {"title": "بازگشتی‌ها (۴)", "chapter": "فصل 22", "duration_hms": "01:33:10"}, {"title": "بازگشتی‌ها (۵)", "chapter": "فصل 23", "duration_hms": "01:24:23"}, {"title": "بازگشتی‌ها (۶)", "chapter": "فصل 24", "duration_hms": "01:43:56"}, {"title": "بازگشتی‌ها (۷)", "chapter": "فصل 25", "duration_hms": "02:24:38"}, {"title": "بازگشتی‌ها (۸)", "chapter": "فصل 26", "duration_hms": "01:07:44"}, {"title": "بازگشتی‌ها (۹)", "chapter": "فصل 27", "duration_hms": "01:22:49"}, {"title": "بازگشتی‌ها (۱۰)", "chapter": "فصل 28", "duration_hms": "01:04:33"}, {"title": "بازگشتی‌ها (۱۱)", "chapter": "فصل 29", "duration_hms": "02:11:30"}, {"title": "روابط", "chapter": "فصل 30", "duration_hms": "01:04:30"}, {"title": "روابط (۲)", "chapter": "فصل 31", "duration_hms": "01:10:39"}, {"title": "روابط (۳)", "chapter": "فصل 32", "duration_hms": "01:03:39"}, {"title": "روابط (۴)", "chapter": "فصل 33", "duration_hms": "01:03:52"}, {"title": "روابط (۵)", "chapter": "فصل 34", "duration_hms": "01:20:55"}, {"title": "روابط (۶)", "chapter": "فصل 35", "duration_hms": "01:16:42"}, {"title": "روابط (۷)", "chapter": "فصل 36", "duration_hms": "01:26:58"}, {"title": "روابط (۸)", "chapter": "فصل 37", "duration_hms": "01:03:57"}, {"title": "روابط (۹)", "chapter": "فصل 38", "duration_hms": "01:40:10"}, {"title": "روابط (۱۰)", "chapter": "فصل 39", "duration_hms": "01:21:48"}, {"title": "روابط (۱۱)", "chapter": "فصل 40", "duration_hms": "01:16:46"}, {"title": "روابط (۱۲)", "chapter": "فصل 41", "duration_hms": "01:33:10"}, {"title": "روابط (۱۳)", "chapter": "فصل 42", "duration_hms": "01:24:23"}, {"title": "روابط (۱۴)", "chapter": "فصل 43", "duration_hms": "00:05:00"}, {"title": "گراف", "chapter": "فصل 44", "duration_hms": "01:43:56"}, {"title": "گراف (۲)", "chapter": "فصل 45", "duration_hms": "02:24:38"}, {"title": "گراف (۳)", "chapter": "فصل 46", "duration_hms": "01:07:44"}, {"title": "گراف (۴)", "chapter": "فصل 47", "duration_hms": "01:22:49"}, {"title": "گراف (۵)", "chapter": "فصل 48", "duration_hms": "01:04:33"}, {"title": "گراف (۶)", "chapter": "فصل 49", "duration_hms": "02:11:30"}, {"title": "گراف (۷)", "chapter": "فصل 50", "duration_hms": "01:59:39"}, {"title": "گراف (۸)", "chapter": "فصل 51", "duration_hms": "01:59:50"}, {"title": "گراف (۹)", "chapter": "فصل 52", "duration_hms": "01:28:53"}, {"title": "نظریه اعداد", "chapter": "فصل 53", "duration_hms": "01:00:59"}, {"title": "نظریه اعداد (۲)", "chapter": "فصل 54", "duration_hms": "02:01:10"}]}, {"name": "نکته و تست ساختمان داده و الگوریتم", "sessions": [{"chapter": "فصل 1: مرتبه زمانی قطعه کد و رشد توابع", "title": "جلسه اول بخش 1", "duration_hms": "50:29:00"}, {"chapter": "فصل 1: مرتبه زمانی قطعه کد و رشد توابع", "title": "جلسه اول بخش 2", "duration_hms": "01:03:00"}, {"chapter": "فصل 1: مرتبه زمانی قطعه کد و رشد توابع", "title": "جلسه اول بخش 3", "duration_hms": "01:31:49"}, {"chapter": "فصل 1: مرتبه زمانی قطعه کد و رشد توابع", "title": "جلسه اول بخش 4", "duration_hms": "01:53:01"}, {"chapter": "فصل 1: مرتبه زمانی قطعه کد و رشد توابع", "title": "جلسه اول بخش 5", "duration_hms": "02:17:31"}, {"chapter": "فصل 2: بازگشتی‌ها", "title": "جلسه دوم بخش 1", "duration_hms": "01:38:48"}, {"chapter": "فصل 2: بازگشتی‌ها", "title": "جلسه دوم بخش 2", "duration_hms": "01:45:45"}, {"chapter": "فصل 2: بازگشتی‌ها", "title": "جلسه دوم بخش 3", "duration_hms": "02:06:13"}, {"chapter": "فصل 2: بازگشتی‌ها", "title": "جلسه دوم بخش 4", "duration_hms": "01:48:00"}, {"chapter": "فصل 2: بازگشتی‌ها", "title": "جلسه سوم بخش 1", "duration_hms": "01:41:07"}, {"chapter": "فصل 2: بازگشتی‌ها", "title": "جلسه سوم بخش 2", "duration_hms": "01:25:25"}, {"chapter": "فصل 3: درخت", "title": "جلسه سوم بخش 3", "duration_hms": "02:01:02"}, {"chapter": "فصل 3: درخت", "title": "جلسه سوم بخش 4", "duration_hms": "01:31:07"}, {"chapter": "فصل 3: درخت", "title": "جلسه چهارم بخش 1", "duration_hms": "02:13:55"}, {"chapter": "فصل 3: درخت", "title": "جلسه چهارم بخش 2", "duration_hms": "01:58:32"}, {"chapter": "فصل 3: درخت", "title": "جلسه چهارم بخش 3", "duration_hms": "02:04:42"}, {"chapter": "فصل 3: درخت", "title": "جلسه چهارم بخش 4", "duration_hms": "01:37:09"}, {"chapter": "فصل 3: درخت", "title": "جلسه پنجم بخش 1", "duration_hms": "02:06:32"}, {"chapter": "فصل 3: درخت", "title": "جلسه پنجم بخش 2", "duration_hms": "01:50:08"}, {"chapter": "فصل 3: درخت", "title": "جلسه پنجم بخش 3", "duration_hms": "56:44:00"}, {"chapter": "فصل 3: درخت", "title": "جلسه پنجم بخش 4", "duration_hms": "01:07:37"}, {"chapter": "فصل 3: درخت", "title": "جلسه پنجم بخش 5", "duration_hms": "01:53:24"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه ششم بخش 1", "duration_hms": "01:19:44"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه ششم بخش 2", "duration_hms": "44:55:00"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه ششم بخش 3", "duration_hms": "01:04:16"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه ششم بخش 4", "duration_hms": "01:55:38"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه ششم بخش 5", "duration_hms": "01:22:37"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه هفتم بخش 1", "duration_hms": "01:04:33"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه هفتم بخش 2", "duration_hms": "01:18:56"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه هفتم بخش 3", "duration_hms": "01:03:57"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه هفتم بخش 4", "duration_hms": "01:52:34"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه هشتم بخش 1", "duration_hms": "01:22:29"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه هشتم بخش 2", "duration_hms": "01:21:48"}, {"chapter": "فصل 4: مرتب‌سازی، درهم‌سازی و جستجو", "title": "جلسه هشتم بخش 3", "duration_hms": "54:35:00"}, {"chapter": "فصل 5: آنالیز استهلاکی + تست‌های دیگر", "title": "جلسه هشتم بخش 4", "duration_hms": "58:15:00"}, {"chapter": "فصل 5: آنالیز استهلاکی + تست‌های دیگر", "title": "جلسه نهم بخش 1", "duration_hms": "01:47:00"}, {"chapter": "فصل 5: آنالیز استهلاکی + تست‌های دیگر", "title": "جلسه نهم بخش 2", "duration_hms": "42:11:00"}, {"chapter": "فصل 5: آنالیز استهلاکی + تست‌های دیگر", "title": "جلسه نهم بخش 3", "duration_hms": "37:48:00"}, {"chapter": "فصل 5: آنالیز استهلاکی + تست‌های دیگر", "title": "جلسه دهم بخش 1", "duration_hms": "31:53:00"}, {"chapter": "فصل 6: گراف", "title": "جلسه دهم بخش 2", "duration_hms": "01:53:00"}, {"chapter": "فصل 6: گراف", "title": "جلسه دهم بخش 3", "duration_hms": "01:13:32"}, {"chapter": "فصل 6: گراف", "title": "جلسه دهم بخش 4", "duration_hms": "01:09:22"}, {"chapter": "فصل 6: گراف", "title": "جلسه دهم بخش 5", "duration_hms": "01:16:15"}, {"chapter": "فصل 6: گراف", "title": "جلسه دهم بخش 6", "duration_hms": "01:29:52"}, {"chapter": "فصل 6: گراف", "title": "جلسه دهم بخش 7", "duration_hms": "58:41:00"}, {"chapter": "فصل 6: گراف", "title": "جلسه یازدهم بخش 1", "duration_hms": "01:06:44"}, {"chapter": "فصل 6: گراف", "title": "جلسه یازدهم بخش 2", "duration_hms": "01:15:17"}, {"chapter": "فصل 6: گراف", "title": "جلسه یازدهم بخش 3", "duration_hms": "29:50:00"}, {"chapter": "تست‌های تکمیلی سری 1", "title": "جلسه دوازدهم بخش 1", "duration_hms": "01:08:56"}, {"chapter": "تست‌های تکمیلی سری 1", "title": "جلسه دوازدهم بخش 2", "duration_hms": "01:39:09"}, {"chapter": "تست‌های تکمیلی سری 1", "title": "جلسه دوازدهم بخش 3", "duration_hms": "01:46:02"}, {"chapter": "تست‌های تکمیلی سری 1", "title": "جلسه دوازدهم بخش 4", "duration_hms": "01:33:18"}, {"chapter": "تست‌های تکمیلی سری 1", "title": "جلسه سیزدهم بخش 1", "duration_hms": "01:51:47"}, {"chapter": "تست‌های تکمیلی سری 1", "title": "جلسه چهاردهم بخش 1", "duration_hms": "01:26:23"}, {"chapter": "تست‌های تکمیلی سری 1", "title": "جلسه چهاردهم بخش 2", "duration_hms": "01:37:35"}, {"chapter": "تست‌های تکمیلی سری 1", "title": "جلسه چهاردهم بخش 3", "duration_hms": "01:24:45"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه اول تکمیلی بخش 1", "duration_hms": "01:22:19"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه اول تکمیلی بخش 2", "duration_hms": "52:35:00"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه اول تکمیلی بخش 3", "duration_hms": "01:40:21"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه دوم تکمیلی بخش 1", "duration_hms": "01:11:48"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه دوم تکمیلی بخش 2", "duration_hms": "01:20:56"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه دوم تکمیلی بخش 3", "duration_hms": "01:13:29"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه سوم تکمیلی بخش 1", "duration_hms": "38:52:00"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه سوم تکمیلی بخش 2", "duration_hms": "34:56:00"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه سوم تکمیلی بخش 3", "duration_hms": "01:37:42"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه سوم تکمیلی بخش 4", "duration_hms": "01:53:56"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه چهارم تکمیلی بخش 1", "duration_hms": "01:21:04"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه چهارم تکمیلی بخش 2", "duration_hms": "01:19:18"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه چهارم تکمیلی بخش 3", "duration_hms": "02:18:56"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه پنجم تکمیلی بخش 1", "duration_hms": "01:27:55"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه پنجم تکمیلی بخش 2", "duration_hms": "01:41:58"}, {"chapter": "تست‌های تکمیلی سری 2", "title": "جلسه پنجم تکمیلی بخش 3", "duration_hms": "37:13:00"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "کامپیوتر و آی‌تی 99", "duration_hms": "03:02:16"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "کامپیوتر 1400", "duration_hms": "03:04:56"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "آی‌تی 1400", "duration_hms": "01:38:19"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "کامپیوتر 1401", "duration_hms": "02:06:02"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "آی‌تی 1401", "duration_hms": "01:12:32"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "کامپیوتر 1402", "duration_hms": "01:37:48"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "آی‌تی 1402", "duration_hms": "01:53:53"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "آی‌تی 1403", "duration_hms": "05:00:00"}, {"chapter": "حل تست‌های کنکور ارشد", "title": "کامپیوتر 1403", "duration_hms": "05:00:00"}]}, {"name": "نکته و تست سیستم عامل", "sessions": [{"title": "مقدمات", "chapter": "فصل 1", "duration_hms": "01:52:40"}, {"title": "مقدمات (۲)", "chapter": "فصل 2", "duration_hms": "01:44:49"}, {"title": "مقدمات (۳)", "chapter": "فصل 3", "duration_hms": "01:45:50"}, {"title": "مقدمات (۴)", "chapter": "فصل 4", "duration_hms": "02:25:08"}, {"title": "مقدمات (۵)", "chapter": "فصل 5", "duration_hms": "01:54:38"}, {"title": "مقدمات (۶)", "chapter": "فصل 6", "duration_hms": "01:21:14"}, {"title": "مقدمات (۷)", "chapter": "فصل 7", "duration_hms": "01:46:45"}, {"title": "مقدمات (۸)", "chapter": "فصل 8", "duration_hms": "01:32:39"}, {"title": "مقدمات (۹)", "chapter": "فصل 9", "duration_hms": "01:40:36"}, {"title": "مقدمات (۱۰)", "chapter": "فصل 10", "duration_hms": "01:31:09"}, {"title": "مقدمات (۱۱)", "chapter": "فصل 11", "duration_hms": "01:52:53"}, {"title": "فرآیندها", "chapter": "فصل 12", "duration_hms": "00:58:04"}, {"title": "فرآیندها (۲)", "chapter": "فصل 13", "duration_hms": "01:47:12"}, {"title": "فرآیندها (۳)", "chapter": "فصل 14", "duration_hms": "01:00:34"}, {"title": "فرآیندها (۴)", "chapter": "فصل 15", "duration_hms": "01:35:53"}, {"title": "فرآیندها (۵)", "chapter": "فصل 16", "duration_hms": "01:14:29"}, {"title": "فرآیندها (۶)", "chapter": "فصل 17", "duration_hms": "01:44:09"}, {"title": "عملیات روی فرآیندها", "chapter": "فصل 18", "duration_hms": "01:04:26"}, {"title": "عملیات روی فرآیندها (۲)", "chapter": "فصل 19", "duration_hms": "01:31:22"}, {"title": "عملیات روی فرآیندها (۳)", "chapter": "فصل 20", "duration_hms": "01:12:36"}, {"title": "عملیات روی فرآیندها (۴)", "chapter": "فصل 21", "duration_hms": "01:41:42"}, {"title": "عملیات روی فرآیندها (۵)", "chapter": "فصل 22", "duration_hms": "01:07:50"}, {"title": "ترد", "chapter": "فصل 23", "duration_hms": "01:38:44"}, {"title": "ترد (۲)", "chapter": "فصل 24", "duration_hms": "01:37:02"}, {"title": "ترد (۳)", "chapter": "فصل 25", "duration_hms": "01:28:56"}, {"title": "ترد (۴)", "chapter": "فصل 26", "duration_hms": "01:12:58"}, {"title": "ترد (۵)", "chapter": "فصل 27", "duration_hms": "01:42:21"}, {"title": "ترد (۶)", "chapter": "فصل 28", "duration_hms": "01:04:08"}, {"title": "زمان‌بندی", "chapter": "فصل 29", "duration_hms": "01:46:45"}, {"title": "زمان‌بندی (۲)", "chapter": "فصل 30", "duration_hms": "01:30:36"}, {"title": "زمان‌بندی (۳)", "chapter": "فصل 31", "duration_hms": "01:43:20"}, {"title": "زمان‌بندی (۴)", "chapter": "فصل 32", "duration_hms": "01:48:24"}, {"title": "زمان‌بندی (۵)", "chapter": "فصل 33", "duration_hms": "01:36:34"}, {"title": "زمان‌بندی (۶)", "chapter": "فصل 34", "duration_hms": "02:15:52"}, {"title": "حافظه‌ها", "chapter": "فصل 35", "duration_hms": "01:37:07"}, {"title": "حافظه‌ها (۲)", "chapter": "فصل 36", "duration_hms": "01:50:15"}, {"title": "حافظه‌ها (۳)", "chapter": "فصل 37", "duration_hms": "01:47:00"}, {"title": "حافظه‌ها (۴)", "chapter": "فصل 38", "duration_hms": "01:43:36"}, {"title": "حافظه‌ها (۵)", "chapter": "فصل 39", "duration_hms": "01:40:46"}, {"title": "حافظه‌ها (۶)", "chapter": "فصل 40", "duration_hms": "01:42:27"}, {"title": "حافظه‌ها (۷)", "chapter": "فصل 41", "duration_hms": "01:12:47"}, {"title": "حافظه‌ها (۸)", "chapter": "فصل 42", "duration_hms": "01:43:15"}, {"title": "حافظه‌ها (۹)", "chapter": "فصل 43", "duration_hms": "02:02:13"}, {"title": "حافظه‌ها (۱۰)", "chapter": "فصل 44", "duration_hms": "01:45:05"}, {"title": "حافظه‌ها (۱۱)", "chapter": "فصل 45", "duration_hms": "01:43:09"}, {"title": "همگام سازی فرآیندها", "chapter": "فصل 46", "duration_hms": "02:04:46"}, {"title": "همگام سازی فرآیندها (۲)", "chapter": "فصل 47", "duration_hms": "01:21:54"}, {"title": "همگام سازی فرآیندها (۳)", "chapter": "فصل 48", "duration_hms": "01:46:26"}, {"title": "همگام سازی فرآیندها (۴)", "chapter": "فصل 49", "duration_hms": "01:05:34"}, {"title": "همگام سازی فرآیندها (۵)", "chapter": "فصل 50", "duration_hms": "02:06:12"}, {"title": "بن بست", "chapter": "فصل 51", "duration_hms": "01:47:10"}, {"title": "بن بست (۲)", "chapter": "فصل 52", "duration_hms": "01:34:21"}, {"title": "بن بست (۳)", "chapter": "فصل 53", "duration_hms": "00:33:06"}, {"title": "بن بست (۴)", "chapter": "فصل 54", "duration_hms": "00:25:13"}, {"title": "هارد", "chapter": "فصل 55", "duration_hms": "01:41:50"}, {"title": "معماری سیستم عامل ها", "chapter": "فصل 56", "duration_hms": "01:56:08"}]}, {"name": "نکته و تست سیگنال و سیستم", "sessions": [{"title": "تعریف سیگنال معادلات خط و سهمی", "chapter": "فصل 1", "duration_hms": "00:29:58"}, {"title": "جمع روی سیگنال‌ها", "chapter": "فصل 2", "duration_hms": "00:33:42"}, {"title": "مشتق سیگنال پیوسته - تفاضل سیگنال...", "chapter": "فصل 3", "duration_hms": "00:27:39"}, {"title": "انتگرال زمان پیوسته - سیگمای سیگنال...", "chapter": "فصل 4", "duration_hms": "00:51:12"}, {"title": "انتگرال زمان پیوسته؛ یادآوری", "chapter": "فصل 5", "duration_hms": "01:28:30"}, {"title": "تبدیل متغیر، انتقال زمانی، وارونگی زمان", "chapter": "فصل 6", "duration_hms": "01:28:10"}, {"title": "کوچکترین مضرب مشترک، بزرگترین مق...", "chapter": "فصل 7", "duration_hms": "00:23:52"}, {"title": "توابع خاص پیوسته، کسینوسی تناوب...", "chapter": "فصل 8", "duration_hms": "01:03:49"}, {"title": "سیگنال‌های متناوب، تعریف، سیگنال‌های", "chapter": "فصل 9", "duration_hms": "01:04:43"}, {"title": "سیگنال‌های متناوب، دوره تناوب جمع...", "chapter": "فصل 10", "duration_hms": "00:52:59"}, {"title": "اعداد مختلط، یادآوری", "chapter": "فصل 11", "duration_hms": "00:33:55"}, {"title": "سیگنال‌های مختلط، فرم قطبی، فرم دکا...", "chapter": "فصل 12", "duration_hms": "00:43:24"}, {"title": "سیگنال نمایی پیوسته", "chapter": "فصل 13", "duration_hms": "00:56:48"}, {"title": "سیگنال نمایی گسسته", "chapter": "فصل 14", "duration_hms": "00:33:14"}, {"title": "سیگنال‌های مهم پیوسته، پله، مستطیل...", "chapter": "فصل 15", "duration_hms": "00:41:31"}, {"title": "چند مثال از سیگنال متناوب با سیگما", "chapter": "فصل 16", "duration_hms": "00:52:04"}, {"title": "سیگنال زوج و فرد؛ تعریف، تفکیک", "chapter": "فصل 17", "duration_hms": "01:15:45"}, {"title": "تصاعد هندسی، یادآوری", "chapter": "فصل 18", "duration_hms": "00:45:12"}, {"title": "سیگنال ضربه زمان پیوسته", "chapter": "فصل 19", "duration_hms": "00:38:50"}, {"title": "سیگنال ضربه زمان گسسته", "chapter": "فصل 20", "duration_hms": "00:16:46"}, {"title": "روابط مهم سیگنال ضربه", "chapter": "فصل 21", "duration_hms": "01:31:48"}, {"title": "قطار ضربه", "chapter": "فصل 22", "duration_hms": "00:06:27"}, {"title": "روابط مهم سیگنال پله", "chapter": "فصل 23", "duration_hms": "00:14:14"}, {"title": "توان و انرژی سیگنال", "chapter": "فصل 24", "duration_hms": "00:45:33"}, {"title": "نکات توان و انرژی", "chapter": "فصل 25", "duration_hms": "00:46:14"}, {"title": "فصل 1 تمرین 10 قسمت a", "chapter": "فصل 26", "duration_hms": "00:09:35"}, {"title": "فصل 1 تمرین 12", "chapter": "فصل 27", "duration_hms": "00:11:39"}, {"title": "فصل 1 تمرین 13", "chapter": "فصل 28", "duration_hms": "00:06:35"}, {"title": "فصل 1 تمرین 14", "chapter": "فصل 29", "duration_hms": "00:11:40"}, {"title": "معرفی سیستم", "chapter": "فصل 30", "duration_hms": "00:16:37"}, {"title": "خروجی سیستم زمان پیوسته با ترسیم", "chapter": "فصل 31", "duration_hms": "00:27:02"}, {"title": "خروجی سیستم زمان گسسته با ترسیم", "chapter": "فصل 32", "duration_hms": "00:15:09"}, {"title": "خروجی سیستم چند ضابطه‌ای ترسیم", "chapter": "فصل 33", "duration_hms": "00:13:58"}, {"title": "حالت‌های ورودی سیستم روش تستی", "chapter": "فصل 34", "duration_hms": "00:18:25"}, {"title": "دسته‌بندی سیستم یا توصیف‌ها", "chapter": "فصل 35", "duration_hms": "00:28:56"}, {"title": "اتصال سیستم‌ها", "chapter": "فصل 36", "duration_hms": "00:19:51"}, {"title": "سیستم بی حافظه", "chapter": "فصل 37", "duration_hms": "00:24:34"}, {"title": "سیستم علی", "chapter": "فصل 38", "duration_hms": "00:36:10"}, {"title": "تعریف سیستم خطی", "chapter": "فصل 39", "duration_hms": "00:17:45"}, {"title": "تشخیص سیستم خطی", "chapter": "فصل 40", "duration_hms": "00:33:06"}, {"title": "سیستم خطی علی", "chapter": "فصل 41", "duration_hms": "00:12:17"}, {"title": "سیستم مستقل از زمان TI", "chapter": "فصل 42", "duration_hms": "00:34:08"}, {"title": "سیستم پایدار", "chapter": "فصل 43", "duration_hms": "00:43:18"}, {"title": "سیستم معکوس پذیر", "chapter": "فصل 44", "duration_hms": "00:25:19"}, {"title": "محاسبه رابطه سیستم معکوس", "chapter": "فصل 45", "duration_hms": "00:22:07"}, {"title": "نقص معکوس‌پذیری با حذف ورودی", "chapter": "فصل 46", "duration_hms": "00:35:12"}, {"title": "اثبات معکوس‌پذیری با تابع پله به پله", "chapter": "فصل 47", "duration_hms": "00:35:09"}, {"title": "اثبات معکوس‌پذیری با رابطه معکوس", "chapter": "فصل 48", "duration_hms": "00:35:57"}, {"title": "سیستم پذیر هست یا نیست", "chapter": "فصل 49", "duration_hms": "00:07:32"}, {"title": "جمع کانولووشن", "chapter": "فصل 50", "duration_hms": "00:21:46"}, {"title": "جمع کانولوشن با ترسیم", "chapter": "فصل 51", "duration_hms": "00:26:05"}, {"title": "خواص جمع کانولوشن و محاسبه با خ...", "chapter": "فصل 52", "duration_hms": "00:37:19"}, {"title": "جمع کانولوشن متناوب", "chapter": "فصل 53", "duration_hms": "00:14:22"}, {"title": "انتگرال کانولوشن", "chapter": "فصل 54", "duration_hms": "00:16:17"}, {"title": "محاسبه انتگرال کانولوشن در یک نقطه فقط ...", "chapter": "فصل 55", "duration_hms": "00:31:26"}, {"title": "انتگرال کانولوشن با ترسیم برای تمام ذ...", "chapter": "فصل 56", "duration_hms": "00:33:57"}, {"title": "شکل تقریبی انتگرال کانولوشن", "chapter": "فصل 57", "duration_hms": "00:42:55"}, {"title": "خواص انتگرال کانولوشن", "chapter": "فصل 58", "duration_hms": "00:42:44"}, {"title": "انتگرال کانولوشن متناوب", "chapter": "فصل 59", "duration_hms": "00:13:11"}, {"title": "سیستم LTI", "chapter": "فصل 60", "duration_hms": "00:21:21"}, {"title": "روابط مهم سیستم LTI", "chapter": "فصل 61", "duration_hms": "00:28:43"}, {"title": "بلاک دیاگرام‌های هم‌ارز سیستم‌های ...", "chapter": "فصل 62", "duration_hms": "00:14:55"}, {"title": "خواص پاسخ ضربه LTI", "chapter": "فصل 63", "duration_hms": "00:45:52"}, {"title": "سری فوریه پیوسته، حوزه فرکانس", "chapter": "فصل 64", "duration_hms": "01:02:15"}, {"title": "سری فوریه گسسته", "chapter": "فصل 65", "duration_hms": "00:56:42"}, {"title": "سری فوریه سیگنالها مثلثاتی - نمایی", "chapter": "فصل 66", "duration_hms": "00:29:29"}, {"title": "بازسازی سیگنال از روی سری فوریه", "chapter": "فصل 67", "duration_hms": "00:12:59"}, {"title": "سری فوریه چند سیگنال مهم", "chapter": "فصل 68", "duration_hms": "00:20:26"}, {"title": "سری فوریه: خاصیت خطی و انتقال ز...", "chapter": "فصل 69", "duration_hms": "00:38:05"}, {"title": "سری فوریه: خاصیت انتقال فرکانسی", "chapter": "فصل 70", "duration_hms": "00:19:58"}, {"title": "سری فوریه: خاصیت وارونگی", "chapter": "فصل 71", "duration_hms": "00:09:02"}, {"title": "سری فوریه: خاصیت مزدوجی", "chapter": "فصل 72", "duration_hms": "00:13:02"}, {"title": "سری فوریه: خاصیت کانولوشن", "chapter": "فصل 73", "duration_hms": "00:14:15"}, {"title": "سری فوریه: خاصیت ضرب", "chapter": "فصل 74", "duration_hms": "00:16:18"}, {"title": "فوریه: خاصیت مشتق", "chapter": "فصل 75", "duration_hms": "00:27:10"}, {"title": "فوریه: خاصیت مشتق‌گیری در زمان ...", "chapter": "فصل 76", "duration_hms": "00:11:58"}, {"title": "فوریه: خاصیت انتگرال‌گیری در زمان", "chapter": "فصل 77", "duration_hms": "00:14:23"}, {"title": "سری فوریه سیگنال واقعی: زوج و فرد", "chapter": "فصل 78", "duration_hms": "00:13:18"}, {"title": "سری فوریه سیگنال حقیقی", "chapter": "فصل 79", "duration_hms": "00:31:57"}, {"title": "سری فوریه به تبدیل فوریه", "chapter": "فصل 80", "duration_hms": "00:33:21"}, {"title": "فرمول‌های تبدیل فوریه", "chapter": "فصل 81", "duration_hms": "00:13:08"}, {"title": "تبدیل فوریه سیگنال نمایی", "chapter": "فصل 82", "duration_hms": "00:22:43"}, {"title": "تبدیل فوریه پالس", "chapter": "فصل 83", "duration_hms": "00:17:25"}, {"title": "تبدیل فوریه سینک", "chapter": "فصل 84", "duration_hms": "00:15:08"}, {"title": "تبدیل فوریه ضربه پله", "chapter": "فصل 85", "duration_hms": "00:19:15"}, {"title": "خاصیت خطی", "chapter": "فصل 86", "duration_hms": "00:14:51"}, {"title": "خاصیت انتقال زمانی", "chapter": "فصل 87", "duration_hms": "00:21:50"}, {"title": "خاصیت انتقال فرکانسی", "chapter": "فصل 88", "duration_hms": "00:21:26"}, {"title": "خاصیت وارونگی و مزدوجی", "chapter": "فصل 89", "duration_hms": "00:10:49"}, {"title": "خاصیت مقیاس در زمان پیوسته", "chapter": "فصل 90", "duration_hms": "00:23:58"}, {"title": "گسترش زمان گسسته", "chapter": "فصل 91", "duration_hms": "00:24:12"}, {"title": "فشردگی زمان گسسته", "chapter": "فصل 92", "duration_hms": "00:16:17"}, {"title": "خاصیت ضرب", "chapter": "فصل 93", "duration_hms": "00:35:35"}, {"title": "خاصیت کانولوشن", "chapter": "فصل 94", "duration_hms": "00:12:18"}, {"title": "خاصیت مشتق‌گیری در زمان", "chapter": "فصل 95", "duration_hms": "00:16:56"}, {"title": "خاصیت انتگرال‌گیری در زمان", "chapter": "فصل 96", "duration_hms": "00:28:00"}, {"title": "خاصیت مشتق‌گیری در فرکانس", "chapter": "فصل 97", "duration_hms": "00:07:07"}, {"title": "رابطه پارسوال", "chapter": "فصل 98", "duration_hms": "00:18:04"}, {"title": "تبدیل فوریه سیگنال متناوب", "chapter": "فصل 99", "duration_hms": "00:24:09"}, {"title": "سیگنال‌های حقیقی؛ زوج و فرد", "chapter": "فصل 100", "duration_hms": "00:12:23"}, {"title": "دوگانگی تبدیل به تبدیل", "chapter": "فصل 101", "duration_hms": "00:28:31"}, {"title": "سیستم غیرخطی و تبدیل فوریه", "chapter": "فصل 102", "duration_hms": "00:19:17"}, {"title": "سیستم با تبدیل فوریه ...", "chapter": "فصل 103", "duration_hms": "00:28:23"}, {"title": "فرمول تبدیل لاپلاس", "chapter": "فصل 104", "duration_hms": "00:25:41"}, {"title": "رابطه تبدیل لاپلاس و تبدیل فوریه", "chapter": "فصل 105", "duration_hms": "00:15:58"}, {"title": "نمودار قطب و صفر", "chapter": "فصل 106", "duration_hms": "00:16:06"}, {"title": "خواص ناحیه همگرایی", "chapter": "فصل 107", "duration_hms": "00:26:04"}, {"title": "جدول تبدیل لاپلاس", "chapter": "فصل 108", "duration_hms": "00:05:00"}, {"title": "خاصیت خطی (۲)", "chapter": "فصل 109", "duration_hms": "00:19:27"}, {"title": "خاصیت انتقال زمانی و فرکانسی", "chapter": "فصل 110", "duration_hms": "00:16:32"}, {"title": "خاصیت وارونگی، مزدوجی، مقیاس ...", "chapter": "فصل 111", "duration_hms": "00:26:10"}, {"title": "کالوش/مشتق زمان، انتگرال زمان ...", "chapter": "فصل 112", "duration_hms": "00:21:09"}, {"title": "کالوش/ادامه؛ مثال‌ها ...", "chapter": "فصل 113", "duration_hms": "00:23:05"}, {"title": "عکس تبدیل لاپلاس", "chapter": "فصل 114", "duration_hms": "00:22:52"}, {"title": "سیگنال حقیقی و فرد، قضایا ...", "chapter": "فصل 115", "duration_hms": "00:17:03"}, {"title": "بسط کسرهای جزئی/یادآوری", "chapter": "فصل 116", "duration_hms": "00:20:12"}, {"title": "فرمول تبدیل Z", "chapter": "فصل 117", "duration_hms": "00:29:17"}, {"title": "رابطه تبدیل Z و تبدیل فوریه", "chapter": "فصل 118", "duration_hms": "00:33:00"}, {"title": "قطب‌ها و صفرها؛ خواص ناحیه هم...", "chapter": "فصل 119", "duration_hms": "00:27:10"}, {"title": "خاصیت مقیاس/معکوس زمانی ...", "chapter": "فصل 120", "duration_hms": "00:26:15"}, {"title": "خاصیت گسترش زمانی Z", "chapter": "فصل 121", "duration_hms": "00:35:44"}, {"title": "خاصیت ... (ادامه)", "chapter": "فصل 122", "duration_hms": "00:26:37"}, {"title": "خواص سیگنال‌های زوج و فرد، سیگنال حقیقی", "chapter": "فصل 123", "duration_hms": "00:42:28"}, {"title": "اعمال Z بر حوزه فرکانس", "chapter": "فصل 124", "duration_hms": "00:41:59"}, {"title": "عکس تبدیل؛ فرم استاندارد، بسط ک...", "chapter": "فصل 125", "duration_hms": "00:28:19"}, {"title": "عکس تبدیل Z؛ بسط توانی، تقسیم", "chapter": "فصل 126", "duration_hms": "00:37:33"}, {"title": "عکس تبدیل؛ فرم کلی", "chapter": "فصل 127", "duration_hms": "00:10:14"}, {"title": "محاسبه خروجی سیستم LTI با تبدیل...", "chapter": "فصل 128", "duration_hms": "00:41:21"}, {"title": "محاسبه پاسخ ضربه زمان گسسته م...", "chapter": "فصل 129", "duration_hms": "00:42:52"}, {"title": "محاسبه پاسخ ضربه زمان گسسته مع...", "chapter": "فصل 130", "duration_hms": "00:34:42"}, {"title": "محاسبه سیگنال خروجی", "chapter": "فصل 131", "duration_hms": "00:23:21"}, {"title": "محاسبه خروجی لحظه‌ای", "chapter": "فصل 132", "duration_hms": "00:15:16"}, {"title": "محاسبه عبوری متناوب / سیووسی...", "chapter": "فصل 133", "duration_hms": "00:42:44"}, {"title": "محاسبه عبوری ضربی ...", "chapter": "فصل 134", "duration_hms": "00:25:42"}, {"title": "تشخیص LTI بودن از حوزه فرکانس", "chapter": "فصل 135", "duration_hms": "00:18:21"}, {"title": "تشخیص علی بودن یک سیستم LTI ...", "chapter": "فصل 136", "duration_hms": "00:26:13"}, {"title": "تشخیص معکوس‌پذیری و محاسبه ...", "chapter": "فصل 137", "duration_hms": "00:33:15"}, {"title": "تشخیص پایداری سیستم LTI", "chapter": "فصل 138", "duration_hms": "00:30:54"}, {"title": "شرط لازم پایداری و علی بودن همزم...", "chapter": "فصل 139", "duration_hms": "00:19:08"}, {"title": "سیستم LTI توصیف‌شده با معادلات ...", "chapter": "فصل 140", "duration_hms": "00:22:11"}, {"title": "فیلتر", "chapter": "فصل 141", "duration_hms": "00:29:55"}, {"title": "نمونه‌برداری", "chapter": "فصل 142", "duration_hms": "00:17:57"}]}, {"name": "نکته و تست شبکه‌های کامپیوتری", "sessions": [{"title": "فصل 1: مفاهیم شبکه", "chapter": "فصل 1", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۲)", "chapter": "فصل 2", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۳)", "chapter": "فصل 3", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۴)", "chapter": "فصل 4", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۵)", "chapter": "فصل 5", "duration_hms": "00:05:00"}, {"title": "فصل 1: مفاهیم شبکه (۶)", "chapter": "فصل 6", "duration_hms": "00:06:00"}, {"title": "فصل 1: مفاهیم شبکه (۷)", "chapter": "فصل 7", "duration_hms": "00:07:00"}, {"title": "فصل 1: مفاهیم شبکه (۸)", "chapter": "فصل 8", "duration_hms": "00:08:00"}, {"title": "فصل 1: مفاهیم شبکه (۹)", "chapter": "فصل 9", "duration_hms": "00:09:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۰)", "chapter": "فصل 10", "duration_hms": "00:10:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۱)", "chapter": "فصل 11", "duration_hms": "00:11:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۲)", "chapter": "فصل 12", "duration_hms": "00:12:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۳)", "chapter": "فصل 13", "duration_hms": "00:13:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۴)", "chapter": "فصل 14", "duration_hms": "00:14:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۵)", "chapter": "فصل 15", "duration_hms": "00:15:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۶)", "chapter": "فصل 16", "duration_hms": "00:16:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۷)", "chapter": "فصل 17", "duration_hms": "00:17:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۸)", "chapter": "فصل 18", "duration_hms": "00:18:00"}, {"title": "فصل 1: مفاهیم شبکه (۱۹)", "chapter": "فصل 19", "duration_hms": "00:19:00"}, {"title": "فصل 1: مفاهیم شبکه (۲۰)", "chapter": "فصل 20", "duration_hms": "00:20:00"}, {"title": "فصل 1: مفاهیم شبکه (۲۱)", "chapter": "فصل 21", "duration_hms": "00:21:00"}, {"title": "فصل 2: لایه کاربرد", "chapter": "فصل 22", "duration_hms": "00:22:00"}, {"title": "فصل 2: لایه کاربرد (۲)", "chapter": "فصل 23", "duration_hms": "00:23:00"}, {"title": "فصل 2: لایه کاربرد (۳)", "chapter": "فصل 24", "duration_hms": "00:24:00"}, {"title": "فصل 2: لایه کاربرد (۴)", "chapter": "فصل 25", "duration_hms": "00:25:00"}, {"title": "فصل 2: لایه کاربرد (۵)", "chapter": "فصل 26", "duration_hms": "00:26:00"}, {"title": "فصل 2: لایه کاربرد (۶)", "chapter": "فصل 27", "duration_hms": "00:27:00"}, {"title": "فصل 3: لایه انتقال", "chapter": "فصل 28", "duration_hms": "00:28:00"}, {"title": "فصل 3: لایه انتقال (۲)", "chapter": "فصل 29", "duration_hms": "00:29:00"}, {"title": "فصل 3: لایه انتقال (۳)", "chapter": "فصل 30", "duration_hms": "00:30:00"}, {"title": "فصل 3: لایه انتقال (۴)", "chapter": "فصل 31", "duration_hms": "00:31:00"}, {"title": "فصل 3: لایه انتقال (۵)", "chapter": "فصل 32", "duration_hms": "00:32:00"}, {"title": "فصل 3: لایه انتقال (۶)", "chapter": "فصل 33", "duration_hms": "00:33:00"}, {"title": "فصل 3: لایه انتقال (۷)", "chapter": "فصل 34", "duration_hms": "00:34:00"}, {"title": "فصل 3: لایه انتقال (۸)", "chapter": "فصل 35", "duration_hms": "00:35:00"}, {"title": "فصل 4: لایه شبکه", "chapter": "فصل 36", "duration_hms": "00:36:00"}, {"title": "فصل 4: لایه شبکه (۲)", "chapter": "فصل 37", "duration_hms": "00:37:00"}, {"title": "فصل 4: لایه شبکه (۳)", "chapter": "فصل 38", "duration_hms": "00:38:00"}, {"title": "فصل 4: لایه شبکه (۴)", "chapter": "فصل 39", "duration_hms": "00:39:00"}, {"title": "فصل 4: لایه شبکه (۵)", "chapter": "فصل 40", "duration_hms": "00:40:00"}, {"title": "فصل 4: لایه شبکه (۶)", "chapter": "فصل 41", "duration_hms": "00:41:00"}, {"title": "فصل 4: لایه شبکه (۷)", "chapter": "فصل 42", "duration_hms": "00:42:00"}, {"title": "فصل 4: لایه شبکه (۸)", "chapter": "فصل 43", "duration_hms": "00:43:00"}, {"title": "فصل 4: لایه شبکه (۹)", "chapter": "فصل 44", "duration_hms": "00:44:00"}, {"title": "فصل 4: لایه شبکه (۱۰)", "chapter": "فصل 45", "duration_hms": "00:45:00"}, {"title": "فصل 4: لایه شبکه (۱۱)", "chapter": "فصل 46", "duration_hms": "00:46:00"}, {"title": "فصل 4: لایه شبکه (۱۲)", "chapter": "فصل 47", "duration_hms": "00:47:00"}, {"title": "فصل 5: لایه پیوند داده", "chapter": "فصل 48", "duration_hms": "00:48:00"}, {"title": "فصل 5: لایه پیوند داده (۲)", "chapter": "فصل 49", "duration_hms": "00:49:00"}, {"title": "فصل 5: لایه پیوند داده (۳)", "chapter": "فصل 50", "duration_hms": "00:50:00"}, {"title": "فصل 5: لایه پیوند داده (۴)", "chapter": "فصل 51", "duration_hms": "00:51:00"}, {"title": "فصل 5: لایه پیوند داده (۵)", "chapter": "فصل 52", "duration_hms": "00:52:00"}, {"title": "فصل 5: لایه پیوند داده (۶)", "chapter": "فصل 53", "duration_hms": "00:53:00"}, {"title": "فصل 5: لایه پیوند داده (۷)", "chapter": "فصل 54", "duration_hms": "00:54:00"}, {"title": "فصل 5: لایه پیوند داده (۸)", "chapter": "فصل 55", "duration_hms": "00:55:00"}, {"title": "فصل 5: لایه پیوند داده (۹)", "chapter": "فصل 56", "duration_hms": "00:56:00"}]}, {"name": "نکته و تست مدار منطقی", "sessions": [{"title": "جلسه 1", "chapter": "فصل 1", "duration_hms": "01:09:07"}, {"title": "جلسه 2", "chapter": "فصل 2", "duration_hms": "01:17:48"}, {"title": "جلسه 3", "chapter": "فصل 3", "duration_hms": "02:08:32"}, {"title": "جلسه 4", "chapter": "فصل 4", "duration_hms": "01:07:40"}, {"title": "جلسه 5", "chapter": "فصل 5", "duration_hms": "01:24:46"}, {"title": "جلسه 6", "chapter": "فصل 6", "duration_hms": "00:28:58"}, {"title": "جلسه 7", "chapter": "فصل 7", "duration_hms": "01:13:26"}, {"title": "جلسه 8", "chapter": "فصل 8", "duration_hms": "01:16:59"}, {"title": "جلسه 9", "chapter": "فصل 9", "duration_hms": "01:03:22"}, {"title": "جلسه 10", "chapter": "فصل 10", "duration_hms": "01:18:30"}, {"title": "جلسه 11", "chapter": "فصل 11", "duration_hms": "01:09:39"}, {"title": "جلسه 12", "chapter": "فصل 12", "duration_hms": "01:31:01"}, {"title": "جلسه 13", "chapter": "فصل 13", "duration_hms": "01:48:51"}, {"title": "جلسه 14", "chapter": "فصل 14", "duration_hms": "01:36:25"}, {"title": "جلسه 15", "chapter": "فصل 15", "duration_hms": "00:05:00"}, {"title": "جلسه 16", "chapter": "فصل 16", "duration_hms": "01:40:40"}, {"title": "جلسه 17", "chapter": "فصل 17", "duration_hms": "00:17:22"}, {"title": "جلسه 18", "chapter": "فصل 18", "duration_hms": "01:27:45"}, {"title": "جلسه 19", "chapter": "فصل 19", "duration_hms": "01:46:56"}, {"title": "جلسه 20", "chapter": "فصل 20", "duration_hms": "01:02:32"}, {"title": "جلسه 21", "chapter": "فصل 21", "duration_hms": "01:38:04"}, {"title": "جلسه 22", "chapter": "فصل 22", "duration_hms": "01:24:47"}, {"title": "جلسه 23", "chapter": "فصل 23", "duration_hms": "01:35:43"}, {"title": "جلسه 24", "chapter": "فصل 24", "duration_hms": "01:35:59"}, {"title": "جلسه 25", "chapter": "فصل 25", "duration_hms": "01:19:14"}, {"title": "جلسه 26", "chapter": "فصل 26", "duration_hms": "01:42:08"}, {"title": "جلسه 27", "chapter": "فصل 27", "duration_hms": "00:25:59"}, {"title": "جلسه 28", "chapter": "فصل 28", "duration_hms": "02:19:17"}, {"title": "جلسه 29", "chapter": "فصل 29", "duration_hms": "01:16:43"}, {"title": "جلسه 30", "chapter": "فصل 30", "duration_hms": "01:22:16"}, {"title": "جلسه 31", "chapter": "فصل 31", "duration_hms": "00:05:00"}]}, {"name": "نکته و تست معماری کامپیوتر", "sessions": [{"title": "جلسه اول بخش 1", "chapter": "فصل 1", "duration_hms": "00:54:26"}, {"title": "جلسه اول بخش 2", "chapter": "فصل 2", "duration_hms": "00:40:21"}, {"title": "جلسه اول بخش 3", "chapter": "فصل 3", "duration_hms": "01:44:20"}, {"title": "جلسه اول بخش 4", "chapter": "فصل 4", "duration_hms": "01:11:02"}, {"title": "جلسه دوم بخش 1", "chapter": "فصل 5", "duration_hms": "01:37:11"}, {"title": "جلسه دوم بخش 2", "chapter": "فصل 6", "duration_hms": "01:21:56"}, {"title": "جلسه دوم بخش 3", "chapter": "فصل 7", "duration_hms": "01:18:43"}, {"title": "جلسه سوم بخش 1", "chapter": "فصل 8", "duration_hms": "01:45:46"}, {"title": "جلسه سوم بخش 2", "chapter": "فصل 9", "duration_hms": "02:25:09"}, {"title": "جلسه سوم بخش 3", "chapter": "فصل 10", "duration_hms": "01:25:23"}, {"title": "جلسه چهارم بخش 1", "chapter": "فصل 11", "duration_hms": "02:06:28"}, {"title": "جلسه چهارم بخش 2", "chapter": "فصل 12", "duration_hms": "02:13:12"}, {"title": "جلسه پنجم بخش 1", "chapter": "فصل 13", "duration_hms": "01:49:57"}, {"title": "جلسه پنجم بخش 2", "chapter": "فصل 14", "duration_hms": "02:09:47"}, {"title": "جلسه پنجم بخش 3", "chapter": "فصل 15", "duration_hms": "01:02:22"}, {"title": "جلسه پنجم بخش 4", "chapter": "فصل 16", "duration_hms": "00:32:26"}, {"title": "جلسه پنجم بخش 5", "chapter": "فصل 17", "duration_hms": "00:23:13"}, {"title": "جلسه ششم بخش 1", "chapter": "فصل 18", "duration_hms": "01:14:38"}, {"title": "جلسه ششم بخش 2", "chapter": "فصل 19", "duration_hms": "00:37:39"}, {"title": "جلسه ششم بخش 3", "chapter": "فصل 20", "duration_hms": "01:11:27"}, {"title": "جلسه ششم بخش 4", "chapter": "فصل 21", "duration_hms": "01:53:26"}, {"title": "جلسه ششم بخش 5", "chapter": "فصل 22", "duration_hms": "01:34:30"}, {"title": "جلسه هفتم بخش 1", "chapter": "فصل 23", "duration_hms": "01:40:55"}, {"title": "جلسه هفتم بخش 2", "chapter": "فصل 24", "duration_hms": "01:23:11"}, {"title": "جلسه هشتم بخش 1", "chapter": "فصل 25", "duration_hms": "01:37:04"}, {"title": "جلسه هشتم بخش 2", "chapter": "فصل 26", "duration_hms": "02:01:34"}, {"title": "جلسه نهم بخش 1", "chapter": "فصل 27", "duration_hms": "00:44:49"}, {"title": "جلسه نهم بخش 2", "chapter": "فصل 28", "duration_hms": "01:15:50"}, {"title": "جلسه نهم بخش 3", "chapter": "فصل 29", "duration_hms": "01:04:25"}, {"title": "جلسه نهم بخش 4", "chapter": "فصل 30", "duration_hms": "01:24:24"}, {"title": "جلسه نهم بخش 4 (۲)", "chapter": "فصل 31", "duration_hms": "00:27:21"}, {"title": "جلسه نهم بخش 5", "chapter": "فصل 32", "duration_hms": "01:04:36"}, {"title": "جلسه نهم بخش 6", "chapter": "فصل 33", "duration_hms": "01:25:33"}, {"title": "جلسه یازدهم بخش 1", "chapter": "فصل 34", "duration_hms": "00:51:41"}, {"title": "جلسه یازدهم بخش 2", "chapter": "فصل 35", "duration_hms": "01:05:40"}, {"title": "جلسه یازدهم بخش 3", "chapter": "فصل 36", "duration_hms": "02:03:19"}, {"title": "جلسه دوازدهم بخش 1", "chapter": "فصل 37", "duration_hms": "00:24:06"}, {"title": "جلسه دوازدهم بخش 2", "chapter": "فصل 38", "duration_hms": "00:22:49"}, {"title": "جلسه دوازدهم بخش 3", "chapter": "فصل 39", "duration_hms": "01:12:26"}, {"title": "جلسه دوازدهم بخش 4", "chapter": "فصل 40", "duration_hms": "01:17:22"}, {"title": "جلسه دوازدهم بخش 5", "chapter": "فصل 41", "duration_hms": "01:11:57"}, {"title": "جلسه سیزدهم بخش 1", "chapter": "فصل 42", "duration_hms": "00:58:42"}, {"title": "جلسه سیزدهم بخش 2", "chapter": "فصل 43", "duration_hms": "01:24:56"}, {"title": "جلسه سیزدهم بخش 3", "chapter": "فصل 44", "duration_hms": "01:28:20"}, {"title": "جلسه سیزدهم بخش 4", "chapter": "فصل 45", "duration_hms": "00:38:04"}, {"title": "جلسه چهاردهم", "chapter": "فصل 46", "duration_hms": "02:56:00"}, {"title": "جلسه دهم بخش 1", "chapter": "فصل 47", "duration_hms": "02:07:41"}, {"title": "جلسه دهم بخش 2", "chapter": "فصل 48", "duration_hms": "02:26:05"}, {"title": "جلسه دهم بخش 3", "chapter": "فصل 49", "duration_hms": "01:40:41"}, {"title": "جلسه دهم بخش 4", "chapter": "فصل 50", "duration_hms": "00:51:02"}, {"title": "جلسه دهم بخش 5", "chapter": "فصل 51", "duration_hms": "00:47:09"}, {"title": "جلسه دهم بخش 6", "chapter": "فصل 52", "duration_hms": "00:20:10"}, {"title": "جلسه دهم بخش 7", "chapter": "فصل 53", "duration_hms": "01:17:29"}, {"title": "جلسه اول تکمیلی بخش 1", "chapter": "فصل 54", "duration_hms": "01:13:59"}, {"title": "جلسه اول تکمیلی بخش 2", "chapter": "فصل 55", "duration_hms": "00:22:00"}, {"title": "جلسه اول تکمیلی بخش 3", "chapter": "فصل 56", "duration_hms": "01:44:50"}, {"title": "جلسه اول تکمیلی بخش 4", "chapter": "فصل 57", "duration_hms": "01:02:20"}, {"title": "جلسه دوم تکمیلی بخش 1", "chapter": "فصل 58", "duration_hms": "01:53:00"}, {"title": "جلسه دوم تکمیلی بخش 2", "chapter": "فصل 59", "duration_hms": "01:06:04"}, {"title": "جلسه دوم تکمیلی بخش 3", "chapter": "فصل 60", "duration_hms": "01:22:28"}, {"title": "جلسه دوم تکمیلی بخش 4", "chapter": "فصل 61", "duration_hms": "00:27:12"}, {"title": "کامپیوتر 99", "chapter": "فصل 62", "duration_hms": "02:00:40"}, {"title": "کامپیوتر 1400 بخش 1", "chapter": "فصل 63", "duration_hms": "00:43:38"}, {"title": "کامپیوتر 1400 بخش 2", "chapter": "فصل 64", "duration_hms": "00:32:45"}, {"title": "کامپیوتر 1401", "chapter": "فصل 65", "duration_hms": "00:25:30"}, {"title": "کامپیوتر 1402", "chapter": "فصل 66", "duration_hms": "00:05:00"}, {"title": "کامپیوتر 1403", "chapter": "فصل 67", "duration_hms": "00:05:00"}]}, {"name": "نکته و تست هوش مصنوعی", "sessions": [{"title": "فصل 1: مقدمات", "chapter": "فصل 1", "duration_hms": "00:05:00"}, {"title": "فصل 1: مقدمات (۲)", "chapter": "فصل 2", "duration_hms": "00:05:00"}, {"title": "فصل 2: عامل‌های هوشمند", "chapter": "فصل 3", "duration_hms": "00:05:00"}, {"title": "فصل 2: عامل‌های هوشمند (۲)", "chapter": "فصل 4", "duration_hms": "00:05:00"}, {"title": "فصل 2: عامل‌های هوشمند (۳)", "chapter": "فصل 5", "duration_hms": "00:05:00"}, {"title": "فصل 2: عامل‌های هوشمند (۴)", "chapter": "فصل 6", "duration_hms": "00:06:00"}, {"title": "فصل 2: عامل‌های هوشمند (۵)", "chapter": "فصل 7", "duration_hms": "00:07:00"}, {"title": "فصل 2: عامل‌های هوشمند (۶)", "chapter": "فصل 8", "duration_hms": "00:08:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو", "chapter": "فصل 9", "duration_hms": "00:09:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو (۲)", "chapter": "فصل 10", "duration_hms": "00:10:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو (۳)", "chapter": "فصل 11", "duration_hms": "00:11:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو (۴)", "chapter": "فصل 12", "duration_hms": "00:12:00"}, {"title": "فصل 3: مقدمات حل مسائل به وسیله جستجو (۵)", "chapter": "فصل 13", "duration_hms": "00:13:00"}, {"title": "فصل 4: جستجوی ناآگاهانه", "chapter": "فصل 14", "duration_hms": "00:14:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۲)", "chapter": "فصل 15", "duration_hms": "00:15:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۳)", "chapter": "فصل 16", "duration_hms": "00:16:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۴)", "chapter": "فصل 17", "duration_hms": "00:17:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۵)", "chapter": "فصل 18", "duration_hms": "00:18:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۶)", "chapter": "فصل 19", "duration_hms": "00:19:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۷)", "chapter": "فصل 20", "duration_hms": "00:20:00"}, {"title": "فصل 4: جستجوی ناآگاهانه (۸)", "chapter": "فصل 21", "duration_hms": "00:21:00"}, {"title": "فصل 5: جستجوی آگاهانه", "chapter": "فصل 22", "duration_hms": "00:22:00"}, {"title": "فصل 5: جستجوی آگاهانه (۲)", "chapter": "فصل 23", "duration_hms": "00:23:00"}, {"title": "فصل 5: جستجوی آگاهانه (۳)", "chapter": "فصل 24", "duration_hms": "00:24:00"}, {"title": "فصل 5: جستجوی آگاهانه (۴)", "chapter": "فصل 25", "duration_hms": "00:25:00"}, {"title": "فصل 5: جستجوی آگاهانه (۵)", "chapter": "فصل 26", "duration_hms": "00:26:00"}, {"title": "فصل 5: جستجوی آگاهانه (۶)", "chapter": "فصل 27", "duration_hms": "00:27:00"}, {"title": "فصل 5: جستجوی آگاهانه (۷)", "chapter": "فصل 28", "duration_hms": "00:28:00"}, {"title": "فصل 5: جستجوی آگاهانه (۸)", "chapter": "فصل 29", "duration_hms": "00:29:00"}, {"title": "فصل 6: جستجوی محلی", "chapter": "فصل 30", "duration_hms": "00:30:00"}, {"title": "فصل 6: جستجوی محلی (۲)", "chapter": "فصل 31", "duration_hms": "00:31:00"}, {"title": "فصل 6: جستجوی محلی (۳)", "chapter": "فصل 32", "duration_hms": "00:32:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت)", "chapter": "فصل 33", "duration_hms": "00:33:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۲)", "chapter": "فصل 34", "duration_hms": "00:34:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۳)", "chapter": "فصل 35", "duration_hms": "00:35:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۴)", "chapter": "فصل 36", "duration_hms": "00:36:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۵)", "chapter": "فصل 37", "duration_hms": "00:37:00"}, {"title": "فصل 7: csp (مسائل فضای محدودیت) (۶)", "chapter": "فصل 38", "duration_hms": "00:38:00"}, {"title": "فصل 8: بازی‌ها", "chapter": "فصل 39", "duration_hms": "00:39:00"}, {"title": "فصل 8: بازی‌ها (۲)", "chapter": "فصل 40", "duration_hms": "00:40:00"}, {"title": "فصل 8: بازی‌ها (۳)", "chapter": "فصل 41", "duration_hms": "00:41:00"}, {"title": "فصل 9: منطق گزاره‌ای", "chapter": "فصل 42", "duration_hms": "00:42:00"}, {"title": "فصل 9: منطق گزاره‌ای (۲)", "chapter": "فصل 43", "duration_hms": "00:43:00"}, {"title": "فصل 10: منطق مرتبه اول", "chapter": "فصل 44", "duration_hms": "00:47:00"}, {"title": "فصل 10: منطق مرتبه اول (۲)", "chapter": "فصل 45", "duration_hms": "00:48:00"}, {"title": "فصل 11: استنتاج در منطق مرتبه اول", "chapter": "فصل 46", "duration_hms": "00:49:00"}, {"title": "فصل 11: استنتاج در منطق مرتبه اول (۲)", "chapter": "فصل 47", "duration_hms": "00:50:00"}, {"title": "فصل 12: عدم قطعیت", "chapter": "فصل 48", "duration_hms": "00:51:00"}]}, {"name": "نکته و تست پایگاه‌داده", "sessions": [{"chapter": "فصل 1: آشنایی", "title": "آشنایی با پایگاه داده", "duration_hms": "17:16:00"}, {"chapter": "فصل 2: RA", "title": "جلسه اول بخش 1", "duration_hms": "01:14:10"}, {"chapter": "فصل 2: RA", "title": "تست 6 دما", "duration_hms": "12:13:00"}, {"chapter": "فصل 2: RA", "title": "جلسه اول بخش 2", "duration_hms": "01:09:17"}, {"chapter": "فصل 2: RA", "title": "جلسه دوم بخش 1 (تست های جبر رابطه ای)", "duration_hms": "01:36:50"}, {"chapter": "فصل 2: RA", "title": "جلسه دوم بخش 2 (تست های جبر رابطه ای)", "duration_hms": "01:29:25"}, {"chapter": "فصل 2: RA", "title": "Test36 - جلسه سوم بخش 1", "duration_hms": "08:32:00"}, {"chapter": "فصل 2: RA", "title": "Test37 - جلسه سوم بخش 2", "duration_hms": "11:47:00"}, {"chapter": "فصل 2: RA", "title": "Test38 - جلسه سوم بخش 3", "duration_hms": "06:31:00"}, {"chapter": "فصل 2: RA", "title": "Test39 - جلسه سوم بخش 4", "duration_hms": "07:33:00"}, {"chapter": "فصل 2: RA", "title": "Test40 - جلسه سوم بخش 5", "duration_hms": "15:53:00"}, {"chapter": "فصل 2: RA", "title": "Test41 - جلسه سوم بخش 6", "duration_hms": "07:11:00"}, {"chapter": "فصل 2: RA", "title": "Test42 - جلسه سوم بخش 7", "duration_hms": "17:26:00"}, {"chapter": "فصل 2: RA", "title": "Test43 - جلسه سوم بخش 8", "duration_hms": "04:38:00"}, {"chapter": "فصل 2: RA", "title": "Test45 - جلسه سوم بخش 9", "duration_hms": "06:22:00"}, {"chapter": "فصل 2: RA", "title": "Test48 - جلسه سوم بخش 10", "duration_hms": "14:42:00"}, {"chapter": "فصل 2: RA", "title": "Test52 - جلسه سوم بخش 11", "duration_hms": "11:55:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "پرس و جوی مقدماتی", "duration_hms": "20:22:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "الحاق و الحاق پذیری", "duration_hms": "34:10:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "view جدول مجازی", "duration_hms": "22:28:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "کلید خارجی cascade", "duration_hms": "44:43:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "group by و توابع عددی بخش یک", "duration_hms": "39:50:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "group by و توابع عددی بخش دو", "duration_hms": "38:38:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "group by و توابع عددی بخش سه", "duration_hms": "01:07:22"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "عملگرهای مجموعه‌ای و exist بخش یک", "duration_hms": "46:44:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "عملگرهای مجموعه‌ای و exist بخش دو", "duration_hms": "45:52:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "عملگرهای مجموعه‌ای و exist بخش سه", "duration_hms": "46:19:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "تقسیم بخش یک", "duration_hms": "36:12:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "تقسیم بخش دو", "duration_hms": "43:29:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "تقسیم بخش سه", "duration_hms": "14:56:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "assertion", "duration_hms": "32:26:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "مجوز و grant", "duration_hms": "07:19:00"}, {"chapter": "فصل 3: SQL (ضبط جدید)", "title": "متفرقه", "duration_hms": "49:32:00"}, {"chapter": "فصل 4: NF", "title": "جلسه هفتم بخش 3 (تست های NF)", "duration_hms": "42:40:00"}, {"chapter": "فصل 4: NF", "title": "جلسه هشتم بخش 1 (تستهای NF)", "duration_hms": "01:36:59"}, {"chapter": "فصل 4: NF", "title": "جلسه هشتم بخش 2 (تستهای NF)", "duration_hms": "01:47:28"}, {"chapter": "فصل 4: NF", "title": "جلسه نهم (تستهای NF 26_46t50_5)", "duration_hms": "01:49:28"}, {"chapter": "فصل 4: NF", "title": "جلسه دهم بخش 1", "duration_hms": "01:30:54"}, {"chapter": "فصل 4: NF", "title": "جلسه دهم بخش 2", "duration_hms": "36:45:00"}, {"chapter": "فصل 5: ER", "title": "جلسه دهم بخش 3", "duration_hms": "54:36:00"}, {"chapter": "فصل 5: ER", "title": "جلسه یازدهم بخش 2", "duration_hms": "55:03:00"}, {"chapter": "فصل 5: ER", "title": "جلسه دوازدهم بخش 1", "duration_hms": "01:26:18"}, {"chapter": "فصل 6: Basics", "title": "جلسه دوازدهم بخش 3", "duration_hms": "52:14:00"}, {"chapter": "ضمیمه 1: MVD 4NF", "title": "جلسه دوازدهم بخش 2", "duration_hms": "21:30:00"}, {"chapter": "ضمیمه 2: TRC-DRC", "title": "جلسه سیزدهم", "duration_hms": "44:31:00"}, {"chapter": "ضمیمه 3: INDEX", "title": "جلسه چهاردهم بخش 1", "duration_hms": "27:16:00"}, {"chapter": "حل تست های کنکور ارشد", "title": "کامپیوتر 1403", "duration_hms": "05:00:00"}, {"chapter": "حل تست های کنکور ارشد", "title": "آی‌تی 1403", "duration_hms": "05:00:00"}]}]}</script>
+
+<script>
+/* ===== Utilities ===== */
+const $=s=>document.querySelector(s); const $$=s=>Array.from(document.querySelectorAll(s));
+const pad=n=>String(n).padStart(2,'0');
+const todayISO=()=> new Date().toISOString().slice(0,10);
+const hmsToMin=hms=>{
+  if(!hms) return 0;
+  if(typeof hms !== 'string') { const n=Number(hms); return isFinite(n)?n:0; }
+  const parts=hms.split(':');
+  if(parts.length===3){ const [H,M,S]=parts.map(x=>Number(x)||0); return H*60 + M + Math.floor(S/60); }
+  if(parts.length===2){ const [H,M]=parts.map(x=>Number(x)||0); return H*60 + M; }
+  const n=Number(hms); return isFinite(n)?n:0;
+};
+const minToHM=m=>`${pad(Math.floor(m/60))}:${pad(m%60)}`;
+const minToHMS=m=>`${pad(Math.floor(m/60))}:${pad(m%60)}:00`;
+const addMinHM=(hm,m)=>{ const [h,mi]=hm.split(':').map(Number); const t=h*60+mi+m; return `${pad(Math.floor((t%1440)/60))}:${pad(t%60)}`; };
+const diffHM=(a,b)=>{ const [h1,m1]=a.split(':').map(Number); const [h2,m2]=b.split(':').map(Number); return (h2*60+m2)-(h1*60+m1); };
+
+/* ===== Jalali (Shamsi) ===== */
+function div(a,b){ return Math.floor(a/b); }
+function gregorian_to_jd(y,m,d){ const a=div(14-m,12); const y2=y+4800-a; const m2=m+12*a-3; return d+div(153*m2+2,5)+365*y2+div(y2,4)-div(y2,100)+div(y2,400)-32045; }
+function jd_to_jalali(j){
+  const depoch=j-gregorian_to_jd(475,1,1);
+  const cycle=div(depoch,1029983);
+  const cyear=depoch%1029983;
+  let ycycle;
+  if(cyear===1029982){ ycycle=2820; } else {
+    const aux1=div(cyear,366);
+    const aux2=cyear%366;
+    ycycle=div(2134*aux1+2816*aux2+2815,1028522)+aux1+1;
+  }
+  const jy=ycycle+2820*cycle+474;
+  const yday=j-gregorian_to_jd(jy,1,1)+1;
+  const jm=(yday<=186)?Math.ceil(yday/31):Math.ceil((yday-186)/30)+6;
+  const jd=j-gregorian_to_jd(jy,jm,1)+1;
+  return [jy,jm,jd];
+}
+function faDate(y,m,d){ const j=gregorian_to_jd(y,m,d); const [jy,jm,jd]=jd_to_jalali(j); const mm=pad(jm), dd=pad(jd); return `${jy}/${mm}/${dd}`; }
+
+/* ===== State ===== */
+let baseCatalog = JSON.parse($('#catalog').textContent);
+try{
+  const over=localStorage.getItem('catalogOverride_v106');
+  if(over){ baseCatalog = JSON.parse(over); }
+}catch{}
+let catalog = JSON.parse(JSON.stringify(baseCatalog));
+let slots=[];
+let nextPtr={}; // course -> {index, offsetMin}
+
+/* ===== Derived ===== */
+function plannedMap(){
+  const map=new Map();
+  (slots||[]).forEach(s=>{ if(s.item){ map.set(s.item.course,(map.get(s.item.course)||0)+(s.item.durMin||0)); } });
+  return map;
+}
+function totalCourseMin(name){
+  const c=(catalog.courses||[]).find(x=>x.name===name); if(!c) return 0;
+  return (c.sessions||[]).reduce((a,b)=>a+hmsToMin(b.duration_hms),0);
+}
+
+/* ===== Render: Courses Library ===== */
+function renderCourses(){
+  const root=$('#coursesList'); root.innerHTML='';
+  const q=($('#search').value||'').trim(); const re=q?new RegExp(q.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'),'i'):null;
+  const pmap=plannedMap();
+  (catalog.courses||[]).forEach((c,ci)=>{
+    if(re && !re.test(c.name)) return;
+    const total=totalCourseMin(c.name), planned=pmap.get(c.name)||0, pct=total?Math.min(100,Math.round(100*planned/total)):0;
+    const box=document.createElement('div'); box.className='course';
+    box.innerHTML=`
+      <div class="metaRow">
+        <div>
+          <div><strong>${c.name}</strong></div>
+          <div class="titleSmall"><span>${minToHMS(planned)} / ${minToHMS(total)}</span> • <span>${pct}%</span></div>
+          <div class="progress"><span style="width:${pct}%"></span></div>
+        </div>
+        <div>
+          <button class="btn" data-act="toggle"><span>جلسات</span><span class="chev">▾</span></button>
+          <button class="btn" data-act="auto">پرکردن خودکار</button>
+        </div>
+      </div>
+      <div class="sessions"></div>`;
+
+    const ses=box.querySelector('.sessions');
+    (c.sessions||[]).forEach((s,si)=>{
+      const row=document.createElement('div'); row.className='srow';
+      const dur=s.duration_hms||'00:30:00', val=dur;
+      row.innerHTML=`
+        <div class="iconbtn add" title="افزودن به بلوک بعدی">➕</div>
+        <div><div>${s.title}</div><div class="titleSmall">${s.chapter||'—'}</div></div>
+        <input type="text" value="${s.title}" class="tTitle" title="نام جلسه">
+        <input type="text" value="${val}" class="tDur" title="مدت (HH:MM:SS)" placeholder="HH:MM:SS" inputmode="numeric" pattern="\\d{2}:\\d{2}:\\d{2}">
+        <div class="iconbtn" data-act="save" title="ذخیره">💾</div>`;
+
+      // add to next empty slot: honor pointer position & offsets
+      row.querySelector('.add').onclick=()=>{
+        initPointersIfNeeded();
+        // Jump pointer to this specific session if needed
+        nextPtr[c.name].index = si;
+        nextPtr[c.name].offsetMin = 0;
+        addNextOfCourseToNextEmptySlot(c.name);
+        recalcProgress();
+      };
+      row.querySelector('[data-act="save"]').onclick=()=>{
+        const newTitle=row.querySelector('.tTitle').value.trim();
+        let newDur=(row.querySelector('.tDur').value||'00:30:00').trim();
+        if(!/^\d{1,2}:\d{2}:\d{2}$/.test(newDur)){ alert('فرمت مدت باید HH:MM:SS باشد.'); return; }
+        const parts=newDur.split(':');
+        const dur=`${pad(parts[0])}:${pad(parts[1])}:${pad(parts[2])}`;
+        catalog.courses[ci].sessions[si].title = newTitle || s.title;
+        catalog.courses[ci].sessions[si].duration_hms = dur;
+        saveCatalogOverride(); renderCourses(); validateCatalog(); recalcProgress();
+      };
+      ses.appendChild(row);
+    });
+
+    box.querySelector('[data-act="toggle"]').onclick=()=> box.classList.toggle('open');
+    box.querySelector('[data-act="auto"]').onclick=()=> { initPointersIfNeeded(); autoFillByCourse(c.name); };
+    root.appendChild(box);
+  });
+}
+
+
+/* === Auto-save & Auto-load (day-aware) === */
+let _autosaveTimer=null;
+const currentISO = ()=> ($('#dayDate').value||todayISO());
+function savePlanSilent(){
+  try{
+    const d=currentISO();
+    const rows=(slots||[]).filter(s=>s.item).map(s=>({start:s.start,end:s.end,course:s.item.course,title:s.item.title,chapter:s.item.chapter||'-',durMin:s.item.durMin}));
+    const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}');
+    all[d]={rows};
+    localStorage.setItem('quickslots_v11', JSON.stringify(all));
+    localStorage.setItem('lastDate', d);
+  }catch(e){ /* ignore */ }
+}
+function queueAutoSave(){ if(_autosaveTimer) clearTimeout(_autosaveTimer); _autosaveTimer=setTimeout(savePlanSilent, 400); }
+function loadPlanIfAny(dateISO){
+  const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}'); const rec=all[dateISO];
+  if(rec && rec.rows){
+    slots=rec.rows.map(r=>({start:r.start,end:r.end,item:{course:r.course,title:r.title,chapter:r.chapter,durMin:r.durMin}}));
+    renderSlots(); recalcProgress();
+  }else{
+    slots = (slots||[]).map(s=>({start:s.start,end:s.end,item:null}));
+    renderSlots(); recalcProgress();
+  }
+}
+window.addEventListener('beforeunload', savePlanSilent);
+
+/* ===== Slots / Timeline ===== */
+function buildSlots(){
+  slots=[];
+  const start=$('#startHM').value||'09:00';
+  const n=Math.max(1,Number($('#blocks').value||4));
+  const blockMin=Math.max(15,Number($('#blockMin').value||120));
+  const breakMin=Math.max(0,Number($('#breakMin').value||15));
+  let t=start;
+  for(let i=0;i<n;i++){
+    const s=t, e=addMinHM(s,blockMin);
+    slots.push({start:s,end:e,item:null});
+    t=addMinHM(e,breakMin);
+  }
+  renderSlots(); recalcProgress();
+}
+function renderHours(){
+  const col=$('#hoursCol'); col.innerHTML='';
+  for(let h=0;h<24;h+=2){
+    const box=document.createElement('div'); box.className='hr'; box.textContent=pad(h)+":00";
+    col.appendChild(box);
+  }
+}
+function renderSlots(){
+  const grid=$('#slotGrid'); grid.innerHTML='';
+  slots.forEach((sl,idx)=>{
+    const div=document.createElement('div'); div.className='slot'+(sl.item?'':' empty');
+    const title= sl.item? `<div class="title">${sl.item.course} — ${sl.item.title}</div>` : `<div class="small">خالی</div>`;
+    const notes= sl.item? `<div class="notes">${sl.item.chapter||'—'} • ${minToHMS(sl.item.durMin)}</div>` : `<div class="notes">—</div>`;
+    div.innerHTML=`
+      <input type="time" class="tStart" value="${sl.start}">
+      <input type="time" class="tEnd" value="${sl.end}">
+      <div>${title}${notes}</div>
+      <button class="del" title="حذف">×</button>`;
+    div.querySelector('.del').onclick=()=>{ slots[idx].item=null; renderSlots(); recalcProgress(); };
+    const tStart=div.querySelector('.tStart'), tEnd=div.querySelector('.tEnd');
+    tStart.onchange=()=> onSlotTimeChange(idx,tStart.value,tEnd.value);
+    tEnd.onchange=()=> onSlotTimeChange(idx,tStart.value,tEnd.value);
+    grid.appendChild(div);
+  });
+}
+function onSlotTimeChange(i,sHM,eHM){
+  if(diffHM(sHM,eHM)<=0){ alert('پایان باید بعد از شروع باشد.'); renderSlots(); return; }
+  const cap=diffHM(sHM,eHM);
+  slots[i].start=sHM; slots[i].end=eHM;
+  if(slots[i].item){ if(slots[i].item.durMin>cap){ slots[i].item.durMin=cap; } }
+  renderSlots(); recalcProgress();
+}
+
+/* ===== Smart Pointers & Autofill ===== */
+function initPointers(){ nextPtr={}; (catalog.courses||[]).forEach(c=> nextPtr[c.name]={index:0, offsetMin:0}); }
+function initPointersIfNeeded(){ if(!nextPtr || Object.keys(nextPtr).length===0) initPointers(); }
+
+function nextSessionChunk(course, startHM, endHM){
+  const c=(catalog.courses||[]).find(x=>x.name===course); if(!c) return null;
+  const ptr=nextPtr[course]||{index:0,offsetMin:0};
+  const sess=(c.sessions||[])[ptr.index]; if(!sess) return null;
+  const slotMin=diffHM(startHM,endHM);
+  const remain=hmsToMin(sess.duration_hms)-ptr.offsetMin;
+  const put=Math.min(slotMin,remain);
+  if(put<=0) return null;
+  const item={course,title:sess.title,chapter:sess.chapter,durMin:put};
+  ptr.offsetMin+=put;
+  if(ptr.offsetMin>=hmsToMin(sess.duration_hms)){ ptr.index++; ptr.offsetMin=0; }
+  nextPtr[course]=ptr; return item;
+}
+function addNextOfCourseToNextEmptySlot(course){
+  const idx=slots.findIndex(s=>!s.item); if(idx===-1){ alert('هیچ بلوک خالی نیست.'); return; }
+  const placed=nextSessionChunk(course,slots[idx].start,slots[idx].end);
+  if(!placed){ alert('جلسه‌ای برای این درس باقی نمانده یا مدت جلسه صفر است.'); return; }
+  slots[idx].item=placed; renderSlots(); recalcProgress();
+}
+function autoFillByCourse(course){
+  for(let i=0;i<slots.length;i++){
+    if(!slots[i].item){
+      const p=nextSessionChunk(course,slots[i].start,slots[i].end);
+      if(!p) break;
+      slots[i].item=p;
+    }
+  }
+  renderSlots(); recalcProgress();
+}
+
+/* ===== Save / Load / History ===== */
+function savePlan(){
+  const d=$('#dayDate').value||todayISO();
+  const rows=slots.filter(s=>s.item).map(s=>({start:s.start,end:s.end,course:s.item.course,title:s.item.title,chapter:s.item.chapter||'-',durMin:s.item.durMin}));
+  const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}');
+  all[d]={rows};
+  localStorage.setItem('quickslots_v11', JSON.stringify(all));
+  alert('ثبت شد.');
+  loadHistory(); localStorage.setItem('lastDate', d); updateFaDateShow();
+}
+function loadPlan(dateISO){
+  const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}'); const rec=all[dateISO];
+  if(!rec){ alert('برای این تاریخ چیزی ذخیره نشده.'); return; }
+  slots=rec.rows.map(r=>({start:r.start,end:r.end,item:{course:r.course,title:r.title,chapter:r.chapter,durMin:r.durMin}}));
+  renderSlots(); recalcProgress();
+}
+function loadHistory(){
+  const tb=$('#histTable tbody'); tb.innerHTML='';
+  const all=JSON.parse(localStorage.getItem('quickslots_v11')||'{}');
+  Object.entries(all).sort((a,b)=>a[0]>b[0]?-1:1).forEach(([d,rec])=>{
+    const totalMin=rec.rows.reduce((a,b)=>a+(b.durMin||0),0);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${d}</td><td>${rec.rows.length}</td><td>${minToHMS(totalMin)}</td>`;
+    tb.appendChild(tr);
+  });
+}
+function exportCSV(){
+  const d=$('#dayDate').value||todayISO();
+  const rows=slots.filter(s=>s.item).map(s=>({start:s.start,end:s.end,course:s.item.course,title:s.item.title,chapter:s.item.chapter||'-',durMin:s.item.durMin}));
+  const header=['date','start','end','course','title','chapter','dur_hms'];
+  const csv=[header.join(',')].concat(rows.map(r=>[d,r.start,r.end,r.course,`"${(r.title||'').replace(/"/g,'""')}"`,`"${(r.chapter||'').replace(/"/g,'""')}"`,minToHMS(r.durMin)].join(','))).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`plan_${d}.csv`; a.click();
+}
+
+/* ===== Progress & Stats ===== */
+const recalcProgress = (()=>{
+  let t=null;
+  return ()=>{ if(t) cancelAnimationFrame(t); t=requestAnimationFrame(()=>{ try{
+    sumBadge(); renderCourses(); validateCatalog(); renderStats(); queueAutoSave();
+  }catch(e){} }); };
+})();
+function sumBadge(){
+  const total=slots.reduce((a,b)=>a+(b.item?b.item.durMin:0),0);
+  $('#sumBadge').textContent='جمع: '+minToHMS(total);
+}
+function renderStats(){
+  const total=slots.reduce((a,b)=>a+(b.item?b.item.durMin:0),0);
+  const blocks=slots.length||1;
+  $('#todayTotal').textContent=minToHMS(total);
+  $('#avgBlock').textContent=minToHMS(Math.floor(total/blocks));
+  const covered=new Set(slots.filter(s=>s.item).map(s=>s.item.course));
+  $('#covered').textContent=covered.size;
+}
+
+/* ===== Date / Fa view ===== */
+function updateFaDateShow(){
+  const d=$('#dayDate').value||todayISO();
+  const dt=new Date(d+"T00:00:00");
+  const y=dt.getFullYear(), m=dt.getMonth()+1, day=dt.getDate();
+  $('#faDateShow').textContent = faDate(y,m,day);
+}
+
+
+/* ===== Drawer wiring ===== */
+function openDrawer(){ $('#drawer').classList.add('open'); $('#overlay').classList.add('show'); }
+function closeDrawer(){ $('#drawer').classList.remove('open'); $('#overlay').classList.remove('show'); }
+
+/* ===== Validator ===== */
+function validateCatalog(){
+  const issues=[];
+  const cs = (catalog.courses||[]);
+  let ok=0, err=0, sessCount=0;
+
+  const durRe=/^\d{1,2}:\d{2}:\d{2}$/;
+  cs.forEach((c,ci)=>{
+    if(!c.name || !c.sessions || !Array.isArray(c.sessions) || c.sessions.length===0){
+      issues.push(`درس «${c.name||'بدون‌نام'}»: لیست جلسات خالی/نامعتبر است.`); err++; return;
+    }
+    c.sessions.forEach((s,si)=>{
+      sessCount++;
+      const title = (s.title||'').trim();
+      const dur = (s.duration_hms||'').trim();
+      if(!title){ issues.push(`درس «${c.name}» جلسهٔ ${si+1}: عنوان خالی است.`); err++; return; }
+      if(!durRe.test(dur)){ issues.push(`درس «${c.name}» جلسهٔ «${title}»: مدت نامعتبر (${dur}).`); err++; return; }
+      if(hmsToMin(dur)<=0){ issues.push(`درس «${c.name}» جلسهٔ «${title}»: مدت صفر/منفی.`); err++; return; }
+      ok++;
+    });
+  });
+
+  $('#countCourses').textContent = cs.length;
+  $('#countSessions').textContent = sessCount;
+  $('#okCount').textContent = ok;
+  $('#errCount').textContent = err;
+  $('#issuesBox').innerHTML = issues.length? ('<ul style="margin:0;padding-inline-start:18px">'+issues.map(i=>'<li>'+i+'</li>').join('')+'</ul>') : 'هیچ ایرادی پیدا نشد ✅';
+}
+
+/* ===== Wiring ===== */
+function attach(){
+  $('#openDrawer').onclick=openDrawer; $('#closeDrawer').onclick=closeDrawer; $('#overlay').onclick=closeDrawer;
+  $('#runValidate').onclick=()=>{ validateCatalog(); alert('بررسی انجام شد.'); };
+  $('#search').oninput=renderCourses;
+  $('#toggleAll').onclick=()=>{ $$('#coursesList .course').forEach(box=>box.classList.toggle('open')); };
+  $('#initPtrs').onclick=()=>{ initPointers(); alert('اشاره‌گرها به ابتدای جلسات بازنشانی شدند.'); };
+
+  $('#build').onclick=buildSlots; $('#save').onclick=savePlan; $('#load').onclick=()=>loadPlan($('#dayDate').value||todayISO());
+  $('#exportCSV').onclick=exportCSV; $('#clearDay').onclick=()=>{ slots=[]; renderSlots(); recalcProgress(); };
+
+  $('#dayDate').onchange=()=>{ localStorage.setItem('lastDate',$('#dayDate').value); updateFaDateShow(); loadPlanIfAny($('#dayDate').value); };
+  $('#prevDay').onclick=()=>{ const d=new Date(($('#dayDate').value||todayISO())+"T00:00:00"); d.setDate(d.getDate()-1); $('#dayDate').value=d.toISOString().slice(0,10); updateFaDateShow(); loadPlanIfAny($('#dayDate').value); };
+  $('#nextDay').onclick=()=>{ const d=new Date(($('#dayDate').value||todayISO())+"T00:00:00"); d.setDate(d.getDate()+1); $('#dayDate').value=d.toISOString().slice(0,10); updateFaDateShow(); loadPlanIfAny($('#dayDate').value); };
+
+  // Auto update on any slot change
+  const grid = document.getElementById('slotGrid');
+  const mo = new MutationObserver(()=>recalcProgress());
+  mo.observe(grid, {childList:true, subtree:true});
+  grid.addEventListener('input', recalcProgress);
+  grid.addEventListener('click', recalcProgress);
+  grid.addEventListener('change', recalcProgress);
+}
+
+function boot(){
+  // Date init (week starts Saturday: handled by your mental model; here we just set date)
+  const last=localStorage.getItem('lastDate'); $('#dayDate').value = last || todayISO();
+  updateFaDateShow();
+  renderHours();
+  buildSlots();
+  loadPlanIfAny($('#dayDate').value||todayISO());
+  initPointers();
+  renderCourses(); validateCatalog();
+  loadHistory();
+}
+
+window.addEventListener('DOMContentLoaded', ()=>{ attach(); boot(); });
+</script>
+
+<script>
+(function(){
+  // Avoid double-initializing
+  if (window.__dayChipsInit) return;
+  window.__dayChipsInit = true;
+
+  const START_KEY = 'plan:startDateISO';
+  const toISO = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0,10);
+  function getStartDate(){
+    const iso = localStorage.getItem(START_KEY);
+    return iso ? new Date(iso+'T00:00:00') : null;
+  }
+  function setStartDate(date){
+    localStorage.setItem(START_KEY, toISO(date));
+  }
+  function daysBetween(a,b){
+    const A = new Date(toISO(a)+'T00:00:00');
+    const B = new Date(toISO(b)+'T00:00:00');
+    return Math.round((B - A) / (24*3600*1000));
+  }
+  function dateFromIndex(idx){
+    const start = getStartDate();
+    if(!start) return null;
+    const d = new Date(start);
+    d.setDate(start.getDate() + (idx-1));
+    return d;
+  }
+  function indexFromDate(date){
+    const start = getStartDate();
+    if(!start) return null;
+    return daysBetween(start, date) + 1;
+  }
+
+  function $(id){ return document.getElementById(id); }
+
+  function ensureStartDateFromPicker(){
+    const dayDate = $('dayDate');
+    if (dayDate && dayDate.value && !getStartDate()){
+      setStartDate(new Date(dayDate.value+'T00:00:00'));
+    }
+  }
+
+  function createChipsBar(){
+    const dayHead = document.querySelector('.dayHead');
+    if (!dayHead || document.getElementById('dayChips')) return null;
+    // insert after .dayHead into same panel.body
+    const chips = document.createElement('div');
+    chips.id = 'dayChips';
+    chips.className = 'chipsScroll';
+    // place chips after dayHead
+    const body = dayHead.parentElement;
+    body.insertBefore(chips, body.querySelector('.divider') || dayHead.nextSibling);
+    // a small divider for spacing if missing
+    const div = document.createElement('div');
+    div.className = 'dayChipsDivider';
+    body.insertBefore(div, chips.nextSibling);
+    return chips;
+  }
+
+  let dayChipsBox = null;
+  let currentDayIndex = 1;
+
+  function renderDayChips(){
+    if (!dayChipsBox) return;
+    dayChipsBox.innerHTML = '';
+    for (let i=1;i<=365;i++){
+      const b = document.createElement('button');
+      b.className = 'dayChip';
+      b.textContent = 'روز ' + i;
+      b.dataset.idx = i;
+      b.addEventListener('click', () => gotoDayIndex(i, true));
+      dayChipsBox.appendChild(b);
+    }
+  }
+
+  function markActiveChip(idx){
+    currentDayIndex = idx;
+    if (!dayChipsBox) return;
+    Array.from(dayChipsBox.children).forEach(el => {
+      el.classList.toggle('active', Number(el.dataset.idx)===idx);
+    });
+    const active = dayChipsBox.querySelector('.dayChip.active');
+    if (active) active.scrollIntoView({inline:'center', behavior:'smooth', block:'nearest'});
+  }
+
+  function updateFaDateLabel(d){
+    const fa = $('faDateShow');
+    if (fa) fa.textContent = toISO(d);
+  }
+
+  function loadDayPlan(){
+    // Prefer calling existing load button handler to reuse logic
+    const loadBtn = $('load');
+    if (loadBtn) {
+      // If a click handler is attached, dispatch click
+      loadBtn.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+    }
+  }
+
+  function gotoDayIndex(idx, autoLoad=true){
+    if (idx<1) idx = 1;
+    if (idx>365) idx = 365;
+    if (!getStartDate()) setStartDate(new Date());
+    const d = dateFromIndex(idx);
+    if (!d) return;
+    const dayDate = $('dayDate');
+    if (dayDate) dayDate.value = toISO(d);
+    updateFaDateLabel(d);
+    markActiveChip(idx);
+    if (autoLoad) loadDayPlan();
+  }
+
+  function initNavBindings(){
+    const dayDate = $('dayDate');
+    const prev = $('prevDay');
+    const next = $('nextDay');
+    if (dayDate){
+      dayDate.addEventListener('change', ()=>{
+        ensureStartDateFromPicker();
+        const idx = indexFromDate(new Date(dayDate.value+'T00:00:00'));
+        if (idx && idx>=1 && idx<=365){
+          markActiveChip(idx);
+        }
+        loadDayPlan();
+      });
+    }
+    if (prev){
+      prev.addEventListener('click', ()=>{
+        const dayDate = $('dayDate');
+        const idx = (dayDate && dayDate.value) ? (indexFromDate(new Date(dayDate.value+'T00:00:00'))||currentDayIndex) : currentDayIndex;
+        gotoDayIndex((idx||1)-1, true);
+      });
+    }
+    if (next){
+      next.addEventListener('click', ()=>{
+        const dayDate = $('dayDate');
+        const idx = (dayDate && dayDate.value) ? (indexFromDate(new Date(dayDate.value+'T00:00:00'))||currentDayIndex) : currentDayIndex;
+        gotoDayIndex((idx||1)+1, true);
+      });
+    }
+  }
+
+  // Boot
+  window.addEventListener('DOMContentLoaded', ()=>{
+    dayChipsBox = createChipsBar();
+    renderDayChips();
+    initNavBindings();
+
+    // init start date if empty
+    if (!getStartDate()) setStartDate(new Date());
+    // If dayDate empty, set to today
+    const dayDate = $('dayDate');
+    if (dayDate && !dayDate.value){
+      dayDate.value = toISO(new Date());
+    }
+
+    // Go to today's index or Day 1
+    const todayIdx = indexFromDate(new Date());
+    if (todayIdx && todayIdx>=1 && todayIdx<=365){
+      gotoDayIndex(todayIdx, true);
+    } else {
+      gotoDayIndex(1, false);
+    }
+  });
+})();
+</script>
+
+<!-- injected: safe autosave + no-merge + no-spurious prompts -->
+<script>
+(function(){
+  // Reuse helpers if present
+  const per = window.__perDayShim || {};
+  const currentISO = per.currentISO ? per.currentISO : (()=> new Date().toISOString().slice(0,10));
+
+  // Global flags
+  window.__LOAD_LOCK = false;   // true while loading a day => disable autosave
+  window.__DIRTY     = false;   // user changed something unsaved
+
+  // Safe JSON helpers
+  function safeParse(s){ try { return JSON.parse(s); } catch(e){ console.warn('parse fail', e); return null; } }
+  function safeStringify(o){ try { return JSON.stringify(o); } catch(e){ console.warn('stringify fail', e); return null; } }
+
+  // Wrap per-day save/load if available; else create light versions
+  const dayNS = (per.STORAGE_NS || 'quickslots_v11');
+  const dayKey = (iso) => `${dayNS}:day:${iso}`;
+
+  function buildPayload(){
+    const st = window.__state__ || {};
+    return {
+      blocks: Array.isArray(st.blocks) ? st.blocks : [],
+      ptrs: st.ptrs || {},
+      coveredTitles: Array.from(st.covered instanceof Set ? st.covered : new Set(st.covered || [])),
+      totals: st.totals || {},
+      meta: { savedAt: Date.now() }
+    };
+  }
+
+  function saveDaySafe(iso){
+    const payload = buildPayload();
+    const s = safeStringify(payload);
+    if (!s) return;
+    try { localStorage.setItem(dayKey(iso), s); window.__DIRTY = false; }
+    catch(e){ console.warn('localStorage save failed', e); /* swallow to avoid popups */ }
+  }
+
+  function resetStateAndUI(){
+    window.__state__ = { blocks: [], covered: new Set(), ptrs: {}, totals: {sec:0} };
+    ['hoursCol','slotGrid','timeline','blocksContainer','planTableBody'].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.innerHTML='';
+    });
+    const setTxt = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
+    setTxt('todayTotal','00:00:00'); setTxt('avgBlock','00:00:00'); setTxt('covered','0');
+    document.querySelectorAll('.course.open').forEach(c=>c.classList.remove('open'));
+  }
+
+  function renderBlocksSafe(blocks){
+    if(typeof renderBlocks==='function'){ try{ renderBlocks(blocks); return; }catch(e){} }
+    const tbody=document.getElementById('planTableBody');
+    if(tbody){
+      tbody.innerHTML='';
+      (blocks||[]).forEach((b,i)=>{
+        const tr=document.createElement('tr');
+        const td=(t)=>{const e=document.createElement('td'); e.textContent=t; return e;};
+        tr.append(td(String(i+1)), td(b?.title||b?.name||'—'), td(b?.start||'—'), td(b?.end||'—'), td(b?.duration||b?.dur||'—'));
+        tbody.appendChild(tr);
+      });
+    }
+  }
+
+  function updateTotalsUISafe(totals){
+    if(typeof updateTotalsUI==='function'){ try{ updateTotalsUI(totals); return; }catch(e){} }
+    const sec = totals?.sec||0;
+    const hh=String(Math.floor(sec/3600)).padStart(2,'0');
+    const mm=String(Math.floor((sec%3600)/60)).padStart(2,'0');
+    const ss=String(sec%60).padStart(2,'0');
+    const el=document.getElementById('todayTotal'); if(el) el.textContent=`${hh}:${mm}:${ss}`;
+  }
+
+  function loadDaySafe(iso){
+    window.__LOAD_LOCK = true;
+    try{
+      resetStateAndUI();
+      const raw = localStorage.getItem(dayKey(iso));
+      if(!raw) return;
+      const data = safeParse(raw) || {};
+      window.__state__ = {
+        blocks: data.blocks||[],
+        ptrs:   data.ptrs||{},
+        covered: new Set(data.coveredTitles||[]),
+        totals: data.totals||{}
+      };
+      renderBlocksSafe(window.__state__.blocks);
+      updateTotalsUISafe(window.__state__.totals);
+      const el=document.getElementById('covered'); if(el) el.textContent=String(window.__state__.covered.size||0);
+    } finally {
+      window.__LOAD_LOCK = false;
+      window.__DIRTY = false;
+    }
+  }
+
+  // Expose
+  window.__perDaySafe = { saveDaySafe, loadDaySafe };
+
+  // Debounced autosave that respects LOAD_LOCK
+  let timer=null;
+  function scheduleAutoSave(){
+    if(window.__LOAD_LOCK) return;
+    window.__DIRTY = true;
+    clearTimeout(timer);
+    timer = setTimeout(()=>{
+      if(window.__LOAD_LOCK) return;
+      saveDaySafe(currentISO());
+    }, 600);
+  }
+
+  // Attach listeners once DOM is ready
+  document.addEventListener('DOMContentLoaded', ()=>{
+    // Intercept noisy alerts (optional). Comment out if you still want native popups.
+    // const _alert = window.alert; window.alert = (m)=>{ console.warn('[alert suppressed]', m); };
+
+    document.body.addEventListener('input', scheduleAutoSave, true);
+    document.body.addEventListener('change', scheduleAutoSave, true);
+
+    // Save/Load buttons (if present) → safe versions
+    const byId = (id)=>document.getElementById(id);
+    byId('save') && byId('save').addEventListener('click', ()=> saveDaySafe(currentISO()));
+    byId('load') && byId('load').addEventListener('click', ()=> loadDaySafe(currentISO()));
+
+    // Prev/Next should trigger explicit load via #dayDate value if present
+    const dayInput = document.getElementById('dayDate') || document.querySelector('input[type="date"].dayDate');
+    const getISO = ()=> dayInput?.value || currentISO();
+
+    byId('prevDay') && byId('prevDay').addEventListener('click', ()=>{ if(dayInput) dayInput.stepDown(); loadDaySafe(getISO()); });
+    byId('nextDay') && byId('nextDay').addEventListener('click', ()=>{ if(dayInput) dayInput.stepUp();   loadDaySafe(getISO()); });
+
+    // Initial load
+    loadDaySafe(getISO());
+  });
+
+  // Only warn on unload if unsaved user edits exist
+  window.addEventListener('beforeunload', function (e) {
+    if (!window.__DIRTY) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+})();
+</script>
+<!-- /injected: safe autosave -->
+
+<!-- injected: suppress specific 'no data for date' alerts -->
+<script>
+(function(){
+  const _alert = window.alert;
+  window.alert = function(msg){
+    const s = (msg==null) ? '' : String(msg);
+    const re = /(برای این تاریخ چیزی ذخیره نشده|چیزی ذخیره نشده|هیچ داده ای برای این تاریخ|no\s+data.*date|no.*saved.*for.*date)/i;
+    if (re.test(s)) {
+      console.warn('[suppressed alert]', s);
+      return; // swallow
+    }
+    return _alert.apply(this, arguments);
+  };
+
+  // Optional: hide any banner/toast with these ids/classes, if the app uses them
+  const css = document.createElement('style');
+  css.textContent = `.noDataNotice, #noDataNotice, .toast-no-data, .alert-no-data{ display:none !important; }`;
+  document.head.appendChild(css);
+})();
+</script>
+<!-- /injected: suppress alerts -->
+
+\
+<!-- injected: pro features (Jalali label, export/import, duplicate, backups, undo/redo, 24h fix) -->
+<script>
+(function(){
+  const per = window.__perDayShim || {};
+  const safe = window.__perDaySafe || {};
+  const NS = (per.STORAGE_NS || 'quickslots_v11');
+  const dayKey = (iso)=> `${NS}:day:${iso}`;
+  const backupsKey = (iso)=> `${dayKey(iso)}:backups`;
+
+  function qs(s){ return document.querySelector(s); }
+  function ce(t, props={}){ const el=document.createElement(t); Object.assign(el, props); return el; }
+
+  function ensureToolbar(){
+    if (document.getElementById('proToolbar')) return;
+    const host = document.querySelector('.toolbar-pro-host') || document.querySelector('#controlsTop') || document.body;
+    const bar = ce('div', { id:'proToolbar', className:'toolbar-pro', dir:'rtl' });
+    bar.innerHTML = `
+      <button class="btn primary" id="btnSaveNow">ثبت فوری</button>
+      <button class="btn" id="btnDuplicatePrev">کپی از روز قبل</button>
+      <span class="sep"></span>
+      <button class="btn" id="btnExportJSON">خروجی JSON</button>
+      <button class="btn" id="btnExportCSV">خروجی CSV</button>
+      <label class="btn ghost" id="btnImportJSON">
+        درون‌ریزی JSON
+        <input type="file" id="fileImportJSON" accept="application/json" style="display:none"/>
+      </label>
+      <span class="sep"></span>
+      <button class="btn" id="btnUndo">بازگردانی</button>
+      <button class="btn" id="btnRedo">ازنو</button>
+      <span id="jalaliBadge" class="badge-muted">—</span>
+    `;
+    host.prepend(bar);
+  }
+
+  // --- Calendar helpers
+  function toJalaliLabel(iso){
+    try{
+      const d = new Date(iso + 'T00:00:00');
+      // Persian calendar without external libs
+      const str = d.toLocaleDateString('fa-IR-u-ca-persian', { weekday:'long', year:'numeric', month:'long', day:'numeric'});
+      return str;
+    }catch(e){ return iso; }
+  }
+
+  function updateJalaliBadge(){
+    const input = document.getElementById('dayDate') || document.querySelector('input[type="date"].dayDate');
+    const iso = input?.value || (per.currentISO ? per.currentISO() : new Date().toISOString().slice(0,10));
+    const b = document.getElementById('jalaliBadge');
+    if (b) b.textContent = toJalaliLabel(iso);
+  }
+
+  // --- Backups (ring buffer per day)
+  function saveBackup(iso){
+    try{
+      const raw = localStorage.getItem(dayKey(iso));
+      if (!raw) return;
+      const arr = JSON.parse(localStorage.getItem(backupsKey(iso)) || '[]');
+      arr.push({ t: Date.now(), raw });
+      while (arr.length > 10) arr.shift(); // keep last 10
+      localStorage.setItem(backupsKey(iso), JSON.stringify(arr));
+    }catch(e){}
+  }
+
+  // --- Undo/Redo via in-memory stacks per session
+  const undoStack = [];
+  const redoStack = [];
+  function pushUndo(snapshot){ undoStack.push(snapshot); if (undoStack.length>30) undoStack.shift(); redoStack.length=0; }
+  function getSnapshot(){ return JSON.stringify(window.__state__ || {}); }
+  function applySnapshot(s){
+    try{
+      const o = JSON.parse(s||'{}');
+      // hard replace, no merge
+      window.__state__ = {
+        blocks: o.blocks||[], ptrs:o.ptrs||{}, covered:new Set(o.covered||o.coveredTitles||[]), totals:o.totals||{}
+      };
+      // re-render:
+      if (typeof renderBlocks==='function') try{ renderBlocks(window.__state__.blocks); }catch(e){}
+      const sec = window.__state__.totals?.sec||0;
+      const el = document.getElementById('todayTotal');
+      if (el) {
+        const hh=String(Math.floor(sec/3600)).padStart(2,'0');
+        const mm=String(Math.floor((sec%3600)/60)).padStart(2,'0');
+        const ss=String(sec%60).padStart(2,'0');
+        el.textContent = `${hh}:${mm}:${ss}`;
+      }
+      const c = document.getElementById('covered'); if(c) c.textContent = String(window.__state__.covered.size||0);
+    }catch(e){}
+  }
+
+  // --- CSV export
+  function toCSV(rows){
+    const esc = (v)=> `"${String(v??'').replace(/"/g,'""')}"`;
+    return rows.map(r=>r.map(esc).join(',')).join('\\n');
+  }
+
+  function exportCSV(iso){
+    const st = window.__state__ || {};
+    const rows = [['index','title','start','end','duration','chapters']];
+    (st.blocks||[]).forEach((b,i)=>{
+      rows.push([i+1, b?.title||b?.name||'', fix24(b?.start||''), fix24(b?.end||''), b?.duration||b?.dur||'', b?.chapters||b?.chapter||'']);
+    });
+    const blob = new Blob([toCSV(rows)], {type:'text/csv;charset=utf-8'});
+    const a = ce('a', { href: URL.createObjectURL(blob), download: `plan_${iso}.csv` });
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  // 24h time fixer: convert e.g., "PM 03:01" or "AM 00:09" to "15:01" / "00:09"
+  function fix24(s){
+    if(!s) return '';
+    const t = String(s).trim();
+    const m = t.match(/^(AM|PM)\s*(\d{1,2}):(\d{2})(?::(\d{2}))?$/i);
+    if(!m) return t;
+    let hh = parseInt(m[2],10), mm=m[3], ss=m[4]||'00', ap=m[1].toUpperCase();
+    if (ap==='PM' && hh<12) hh+=12;
+    if (ap==='AM' && hh===12) hh=0;
+    return String(hh).padStart(2,'0')+':'+mm+':'+ss;
+  }
+
+  function normalizeTimes(){
+    const st = window.__state__ || {};
+    (st.blocks||[]).forEach(b=>{
+      if (b.start) b.start = fix24(b.start);
+      if (b.end) b.end = fix24(b.end);
+      if (b.duration && /^\d{1,2}:\d{2}$/.test(b.duration)) b.duration += ':00';
+    });
+  }
+
+  // --- Duplicate from previous day (only if current empty)
+  function duplicateFromPrev(iso){
+    const d = new Date(iso+'T00:00:00');
+    d.setDate(d.getDate()-1);
+    const prevIso = d.toISOString().slice(0,10);
+    const prev = localStorage.getItem(dayKey(prevIso));
+    if (!prev) return false;
+    try{
+      const obj = JSON.parse(prev);
+      window.__state__ = {
+        blocks: obj.blocks||[], ptrs: obj.ptrs||{}, covered:new Set(obj.coveredTitles||[]), totals: obj.totals||{}
+      };
+      if (typeof renderBlocks==='function') try{ renderBlocks(window.__state__.blocks); }catch(e){}
+      return true;
+    }catch(e){ return false; }
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    ensureToolbar();
+    updateJalaliBadge();
+
+    const dayInput = document.getElementById('dayDate') || document.querySelector('input[type="date"].dayDate');
+    const getISO = ()=> dayInput?.value || (per.currentISO ? per.currentISO() : new Date().toISOString().slice(0,10));
+
+    // Buttons
+    qs('#btnSaveNow')?.addEventListener('click', ()=>{
+      normalizeTimes();
+      saveBackup(getISO());
+      (safe.saveDaySafe || (()=>{}))(getISO());
+    });
+
+    qs('#btnExportJSON')?.addEventListener('click', ()=>{
+      const iso = getISO();
+      const raw = localStorage.getItem(dayKey(iso)) || JSON.stringify({});
+      const blob = new Blob([raw], {type:'application/json;charset=utf-8'});
+      const a = ce('a', { href: URL.createObjectURL(blob), download: `plan_${iso}.json` });
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+
+    qs('#btnExportCSV')?.addEventListener('click', ()=> exportCSV(getISO()));
+
+    const file = qs('#fileImportJSON');
+    file?.addEventListener('change', (ev)=>{
+      const iso = getISO();
+      const f = ev.target.files?.[0]; if(!f) return;
+      const rd = new FileReader();
+      rd.onload = ()=>{
+        try{
+          const obj = JSON.parse(rd.result);
+          // strict replace
+          window.__state__ = {
+            blocks: obj.blocks||[], ptrs: obj.ptrs||{}, covered:new Set(obj.coveredTitles||[]), totals: obj.totals||{}
+          };
+          normalizeTimes();
+          if (typeof renderBlocks==='function') try{ renderBlocks(window.__state__.blocks); }catch(e){}
+          localStorage.setItem(dayKey(iso), JSON.stringify(obj));
+          updateJalaliBadge();
+        }catch(e){ console.warn('Import failed', e); }
+      };
+      rd.readAsText(f);
+      ev.target.value = '';
+    });
+
+    qs('#btnDuplicatePrev')?.addEventListener('click', ()=>{
+      const iso = getISO();
+      const raw = localStorage.getItem(dayKey(iso));
+      if (raw) { console.warn('Day already has data, duplicate skipped'); return; }
+      if (duplicateFromPrev(iso)) {
+        normalizeTimes();
+        (safe.saveDaySafe || (()=>{}))(iso);
+      }
+    });
+
+    // Undo/Redo
+    document.body.addEventListener('input', ()=>{
+      try{ pushUndo(getSnapshot()); }catch(e){}
+    }, true);
+    qs('#btnUndo')?.addEventListener('click', ()=>{
+      if (!undoStack.length) return;
+      const last = undoStack.pop(); redoStack.push(getSnapshot()); applySnapshot(last);
+    });
+    qs('#btnRedo')?.addEventListener('click', ()=>{
+      if (!redoStack.length) return;
+      const next = redoStack.pop(); pushUndo(getSnapshot()); applySnapshot(next);
+    });
+
+    // Keep jalali badge current
+    dayInput && dayInput.addEventListener('change', updateJalaliBadge);
+    document.body.addEventListener('click', (e)=>{
+      if (e.target.closest('.dayChip')) setTimeout(updateJalaliBadge, 0);
+    }, true);
+  });
+})();
+</script>
+<!-- /injected: pro features -->
+
+
+<!-- injected: weekday fix (local noon) + hard 24h normalization -->
+<script>
+(function(){
+  // ===== Date helpers (avoid timezone off-by-one) =====
+  function localDateFromISO(iso){
+    // Build at local noon to dodge DST bumps, then rely on local calendar APIs
+    const parts = String(iso||'').split('-').map(Number);
+    const y = parts[0]||1970, m=(parts[1]||1)-1, d=parts[2]||1;
+    return new Date(y, m, d, 12, 0, 0, 0);
+  }
+  // Replace isoFromDOY with a local-noon version
+  window.isoFromDOY = function(year, doy){
+    const base = new Date(year, 0, 1, 12, 0, 0, 0);
+    base.setDate(base.getDate() + (doy-1));
+    const y = base.getFullYear();
+    const m = String(base.getMonth()+1).padStart(2,'0');
+    const d = String(base.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  };
+  // Fix Jalali label using local date
+  window.toJalaliLabel = function(iso){
+    try{
+      const d = localDateFromISO(iso);
+      return d.toLocaleDateString('fa-IR-u-ca-persian', { weekday:'long', year:'numeric', month:'long', day:'numeric'});
+    }catch(e){ return iso; }
+  };
+
+  // ===== 24h normalization (strict) =====
+  function fix24(s){
+    if(!s) return '';
+    const t = String(s).trim();
+    // already HH:MM or HH:MM:SS → force SS
+    let mm;
+    const m24 = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (m24){
+      let hh = Math.min(23, Math.max(0, parseInt(m24[1],10)));
+      mm = m24[2]; const ss = m24[3] || '00';
+      return String(hh).padStart(2,'0')+':'+mm+':'+ss;
+    }
+    // AM/PM → 24h
+    const mAP = t.match(/^(AM|PM)\s*(\d{1,2}):(\d{2})(?::(\d{2}))?$/i);
+    if(mAP){
+      let hh = parseInt(mAP[2],10), ap=mAP[1].toUpperCase();
+      mm = mAP[3]; const ss = mAP[4] || '00';
+      if (ap==='PM' && hh<12) hh+=12;
+      if (ap==='AM' && hh===12) hh=0;
+      return String(hh).padStart(2,'0')+':'+mm+':'+ss;
+    }
+    return t;
+  }
+  function normalizeStateTimes(){
+    const st = window.__state__ || {};
+    (st.blocks||[]).forEach(b=>{
+      if (b.start) b.start = fix24(b.start);
+      if (b.end) b.end = fix24(b.end);
+      if (b.duration) b.duration = fix24(b.duration);
+    });
+  }
+
+  // Hook into existing safe loader/saver if present
+  const safe = window.__perDaySafe || {};
+  if (safe.loadDaySafe){
+    const origLoad = safe.loadDaySafe;
+    safe.loadDaySafe = function(iso){
+      origLoad.call(safe, iso);
+      normalizeStateTimes();
+      try{
+        if (typeof renderBlocks==='function') renderBlocks(window.__state__.blocks);
+      }catch(e){}
+      // Update any weekday/Jalali labels if present
+      try{
+        const b = document.getElementById('jalaliBadge');
+        if (b) b.textContent = window.toJalaliLabel(iso);
+      }catch(e){}
+    };
+  }
+
+  if (safe.saveDaySafe){
+    const origSave = safe.saveDaySafe;
+    safe.saveDaySafe = function(iso){
+      normalizeStateTimes();
+      origSave.call(safe, iso);
+    };
+  }
+
+  // Normalize immediately after DOM ready (for initial render & any manual renderers)
+  document.addEventListener('DOMContentLoaded', ()=>{
+    // Ensure any existing blocks in the DOM also show 24h
+    try{
+      normalizeStateTimes();
+      if (typeof renderBlocks==='function') renderBlocks(window.__state__.blocks);
+    }catch(e){}
+  });
+
+  // Expose for other scripts
+  window.__fix24 = { fix24, normalizeStateTimes };
+})();
+</script>
+<!-- /injected: weekday+24h -->
+
+<script>
+// === Clean 24h patch (safe, no Shadow tricks, no global overrides) ===
+(function(){
+  "use strict";
+  function to24(t){
+    if(!t) return t;
+    t = String(t).trim();
+    var m = t.match(/^(AM|PM)\s*(\d{1,2}):(\d{2})(?::(\d{2}))?$/i);
+    if(m){
+      var hh = parseInt(m[2],10), mm=m[3], ss=m[4]||'00', ap=m[1].toUpperCase();
+      if(ap==='PM' && hh<12) hh+=12;
+      if(ap==='AM' && hh===12) hh=0;
+      return String(hh).padStart(2,'0')+':'+mm+':'+ss;
+    }
+    m = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if(m){
+      var hh2 = parseInt(m[1],10), mm2=m[2], ss2=m[3]||'00', ap2=m[4].toUpperCase();
+      if(ap2==='PM' && hh2<12) hh2+=12;
+      if(ap2==='AM' && hh2===12) hh2=0;
+      return String(hh2).padStart(2,'0')+':'+mm2+':'+ss2;
+    }
+    // If already HH:MM or HH:MM:SS ensure :SS
+    m = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if(m){
+      var H = Math.max(0, Math.min(23, parseInt(m[1],10)));
+      return String(H).padStart(2,'0')+':'+m[2]+':'+(m[3]||'00');
+    }
+    return t;
+  }
+
+  function sanitizeRoot(root){
+    if(!root) return;
+    // inputs/texts
+    var nodes = root.querySelectorAll('input, .time, .badge, .chip, [data-time], [data-start], [data-end], .slot, .slot_time, .slot_notes, .block');
+    nodes.forEach(function(el){
+      if ('value' in el && el.value){
+        var v = el.value;
+        if (/(AM|PM)/i.test(v)) el.value = to24(v);
+      }
+      ['textContent'].forEach(function(k){
+        var txt = el[k];
+        if (txt && /(AM|PM)/i.test(txt)) el[k] = to24(txt);
+      });
+      ['placeholder','title','aria-label','data-time','data-start','data-end'].forEach(function(a){
+        var v2 = el.getAttribute && el.getAttribute(a);
+        if (v2 && /(AM|PM)/i.test(v2)) el.setAttribute(a, to24(v2));
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    sanitizeRoot(document);
+    // After each renderBlocks, sanitize again
+    if (typeof window.renderBlocks === 'function'){
+      var _orig = window.renderBlocks;
+      window.renderBlocks = function(){
+        var r = _orig.apply(this, arguments);
+        try{ sanitizeRoot(document); }catch(e){}
+        return r;
+      };
+    }
+    // Observe future mutations lightly
+    var mo = new MutationObserver(function(muts){
+      for (var i=0;i<muts.length;i++){
+        var m = muts[i];
+        if (m.addedNodes && m.addedNodes.length){
+          for (var j=0;j<m.addedNodes.length;j++){
+            var n = m.addedNodes[j];
+            if (n.nodeType===1) sanitizeRoot(n);
+          }
+        }
+        if (m.type==='characterData'){
+          var p = m.target.parentElement;
+          if (p) sanitizeRoot(p);
+        }
+      }
+    });
+    mo.observe(document.body, { childList:true, subtree:true, characterData:true });
+  });
+})();
+</script>
+</body>
+</html>
