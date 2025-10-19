@@ -662,6 +662,8 @@ function plannedMap(){
   if(override==='zero'){ return new Map(); }
   const mode = (localStorage.getItem('plan:progressMode') || window.__progressMode || 'cumulative'); // 'daily' | 'cumulative'
   const map=new Map();
+  const liveSlots = Array.isArray(slots) ? slots : [];
+  const hasLiveForCurrent = liveSlots.some(s=>s && s.item);
   try{
     const curISO = typeof selectedISO==='function' ? selectedISO() : null;
     if(mode === 'cumulative'){
@@ -675,7 +677,7 @@ function plannedMap(){
         }
       });
       // Subtract saved contribution of current day to avoid double counting with live slots
-      if(curISO){
+      if(curISO && hasLiveForCurrent){
         const savedCur = (typeof readDayPlan==='function') ? readDayPlan(curISO) : null;
         if(savedCur && Array.isArray(savedCur.rows)){
           savedCur.rows.forEach(r=>{
@@ -697,7 +699,7 @@ function plannedMap(){
     }
   }catch(e){ /* ignore */ }
   // Add live (unsaved) slots for the current view so progress updates instantly
-  (typeof slots!=='undefined' && slots || []).forEach(s=>{ if(s.item){ map.set(s.item.course,(map.get(s.item.course)||0) + (s.item.durMin||0)); } });
+  liveSlots.forEach(s=>{ if(s && s.item){ map.set(s.item.course,(map.get(s.item.course)||0) + (s.item.durMin||0)); } });
   return map;
 }
 function totalCourseMin(name){
@@ -808,6 +810,18 @@ function loadPlanIfAny(dateISO){
   }
   renderSlots();
   recalcProgress();
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('day:changed',{ detail:{ iso } }) : new Event('day:changed');
+    window.dispatchEvent(ev);
+  }catch(e){}
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('plan:loaded',{ detail:{ iso } }) : new Event('plan:loaded');
+    window.dispatchEvent(ev);
+  }catch(e){}
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('plan:saved',{ detail:{ iso, source:'load' } }) : new Event('plan:saved');
+    window.dispatchEvent(ev);
+  }catch(e){}
 }
 window.addEventListener('beforeunload', savePlanSilent);
 
@@ -1328,11 +1342,58 @@ window.addEventListener('DOMContentLoaded', ()=>{ attach();
     };
   }
 
+  function captureRows(iso){
+    const rowsFromSlots = Array.isArray(window.slots)
+      ? window.slots
+          .filter(s => s && s.item)
+          .map(s => ({
+            start: (typeof to24h === 'function') ? to24h(s.start) : (s.start || ''),
+            end:   (typeof to24h === 'function') ? to24h(s.end)   : (s.end || ''),
+            course: s.item.course,
+            title: s.item.title,
+            chapter: s.item.chapter || '-',
+            durMin: Number(s.item.durMin) || 0
+          }))
+      : [];
+    if (rowsFromSlots.length) return rowsFromSlots;
+
+    try {
+      const existing = safeParse(localStorage.getItem(dayKey(iso)));
+      if (existing && Array.isArray(existing.rows)) {
+        return existing.rows
+          .map(r => ({
+            start: r.start || '',
+            end: r.end || '',
+            course: r.course,
+            title: r.title,
+            chapter: r.chapter || '-',
+            durMin: Number(r.durMin) || 0
+          }))
+          .filter(r => r.course);
+      }
+    } catch(e){}
+
+    return [];
+  }
+
   function saveDaySafe(iso){
     const payload = buildPayload();
+    const rows = captureRows(iso);
+    if (rows.length) {
+      payload.rows = rows;
+    } else {
+      delete payload.rows;
+    }
     const s = safeStringify(payload);
     if (!s) return;
-    try { localStorage.setItem(dayKey(iso), s); window.__DIRTY = false; }
+    try {
+      if (!rows.length && (!payload.blocks || payload.blocks.length===0)) {
+        localStorage.removeItem(dayKey(iso));
+      } else {
+        localStorage.setItem(dayKey(iso), s);
+      }
+      window.__DIRTY = false;
+    }
     catch(e){ console.warn('localStorage save failed', e); /* swallow to avoid popups */ }
   }
 
