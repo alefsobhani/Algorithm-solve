@@ -655,6 +655,7 @@ try{
 let catalog = JSON.parse(JSON.stringify(baseCatalog));
 let slots=[];
 let nextPtr={}; // course -> {index, offsetMin}
+let activeISO=null;
 
 /* ===== Derived ===== */
 function plannedMap(){
@@ -774,30 +775,50 @@ function renderCourses(){
 /* === Auto-save & Auto-load (day-aware) === */
 let _autosaveTimer=null;
 const currentISO = ()=> selectedISO();
+function rowsFromSlots(list){
+  const src = Array.isArray(list) ? list : slots;
+  return (Array.isArray(src)?src:[])
+    .filter(s=>s && s.item)
+    .map(s=>({
+      start: to24h(s.start),
+      end: to24h(s.end),
+      course:s.item.course,
+      title:s.item.title,
+      chapter:s.item.chapter||'-',
+      durMin:s.item.durMin
+    }))
+    .filter(r=>r.course);
+}
+function persistRowsForISO(iso, rows){
+  const safeIso = normalizeISO(iso||'');
+  if(!safeIso) return;
+  activeISO = safeIso;
+  if(rows && rows.length){
+    writeDayPlan(safeIso,{rows});
+  }else{
+    removeDayPlan(safeIso);
+  }
+  try{ localStorage.setItem('lastDate', safeIso); }catch(e){}
+}
+function persistCurrentDay(){
+  if(_autosaveTimer) { clearTimeout(_autosaveTimer); _autosaveTimer=null; }
+  if(!activeISO) return;
+  try{
+    const rows = rowsFromSlots();
+    persistRowsForISO(activeISO, rows);
+  }catch(e){ /* ignore */ }
+}
 function savePlanSilent(){
   try{
-    const d=currentISO();
-    const rows=(slots||[])
-      .filter(s=>s.item)
-      .map(s=>({
-        start: to24h(s.start),
-        end: to24h(s.end),
-        course:s.item.course,
-        title:s.item.title,
-        chapter:s.item.chapter||'-',
-        durMin:s.item.durMin
-      }));
-    if(rows.length){
-      writeDayPlan(d,{rows});
-    }else{
-      removeDayPlan(d);
-    }
-    localStorage.setItem('lastDate', d);
+    const iso = activeISO || currentISO();
+    const rows = rowsFromSlots();
+    persistRowsForISO(iso, rows);
   }catch(e){ /* ignore */ }
 }
 function queueAutoSave(){ if(_autosaveTimer) clearTimeout(_autosaveTimer); _autosaveTimer=setTimeout(savePlanSilent, 400); }
 function loadPlanIfAny(dateISO){
   const iso = normalizeISO(dateISO||selectedISO());
+  activeISO = iso;
   const rec = readDayPlan(iso);
   if(rec && Array.isArray(rec.rows)){
     slots=rec.rows.map(r=>({
@@ -926,24 +947,15 @@ function autoFillByCourse(course){
 /* ===== Save / Load / History ===== */
 function savePlan(){
   const d=selectedISO();
-  const rows=slots.filter(s=>s.item).map(s=>({
-    start: to24h(s.start),
-    end: to24h(s.end),
-    course:s.item.course,
-    title:s.item.title,
-    chapter:s.item.chapter||'-',
-    durMin:s.item.durMin
-  }));
-  if(rows.length){
-    writeDayPlan(d,{rows});
-  }else{
-    removeDayPlan(d);
-  }
+  activeISO = d;
+  const rows=rowsFromSlots();
+  persistRowsForISO(d, rows);
   alert('ثبت شد.');
-  loadHistory(); localStorage.setItem('lastDate', d); updateFaDateShow();
+  loadHistory(); updateFaDateShow();
 }
 function loadPlan(dateISO){
   const iso=normalizeISO(dateISO||selectedISO());
+  persistCurrentDay();
   localStorage.setItem('lastDate', iso);
   loadPlanIfAny(iso);
   updateFaDateShow();
@@ -1059,12 +1071,14 @@ function attach(){
 
   $('#dayDate').onchange=()=>{
     const iso=selectedISO();
+    persistCurrentDay();
     localStorage.setItem('lastDate',iso);
     updateFaDateShow();
     loadPlanIfAny(iso);
   };
   $('#prevDay').onclick=()=>{
-    const base=new Date((selectedISO())+"T00:00:00");
+    persistCurrentDay();
+    const base=new Date((activeISO||selectedISO())+"T00:00:00");
     base.setDate(base.getDate()-1);
     const iso=base.toISOString().slice(0,10);
     $('#dayDate').value=iso;
@@ -1073,7 +1087,8 @@ function attach(){
     loadPlanIfAny(iso);
   };
   $('#nextDay').onclick=()=>{
-    const base=new Date((selectedISO())+"T00:00:00");
+    persistCurrentDay();
+    const base=new Date((activeISO||selectedISO())+"T00:00:00");
     base.setDate(base.getDate()+1);
     const iso=base.toISOString().slice(0,10);
     $('#dayDate').value=iso;
@@ -1100,6 +1115,7 @@ function boot(){
   let initial=normalizeISO(last||'2025-10-19');
   if (initial < '2025-10-19') initial = '2025-10-19';
   $('#dayDate').value = initial;
+  activeISO = normalizeISO(initial);
   updateFaDateShow();
   renderHours();
   buildSlots();
