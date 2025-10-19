@@ -655,6 +655,7 @@ try{
 let catalog = JSON.parse(JSON.stringify(baseCatalog));
 let slots=[];
 let nextPtr={}; // course -> {index, offsetMin}
+let activeISO=null;
 
 /* ===== Derived ===== */
 function plannedMap(){
@@ -662,6 +663,8 @@ function plannedMap(){
   if(override==='zero'){ return new Map(); }
   const mode = (localStorage.getItem('plan:progressMode') || window.__progressMode || 'cumulative'); // 'daily' | 'cumulative'
   const map=new Map();
+  const liveSlots = Array.isArray(slots) ? slots : [];
+  const hasLiveForCurrent = liveSlots.some(s=>s && s.item);
   try{
     const curISO = typeof selectedISO==='function' ? selectedISO() : null;
     if(mode === 'cumulative'){
@@ -675,7 +678,7 @@ function plannedMap(){
         }
       });
       // Subtract saved contribution of current day to avoid double counting with live slots
-      if(curISO){
+      if(curISO && hasLiveForCurrent){
         const savedCur = (typeof readDayPlan==='function') ? readDayPlan(curISO) : null;
         if(savedCur && Array.isArray(savedCur.rows)){
           savedCur.rows.forEach(r=>{
@@ -697,7 +700,7 @@ function plannedMap(){
     }
   }catch(e){ /* ignore */ }
   // Add live (unsaved) slots for the current view so progress updates instantly
-  (typeof slots!=='undefined' && slots || []).forEach(s=>{ if(s.item){ map.set(s.item.course,(map.get(s.item.course)||0) + (s.item.durMin||0)); } });
+  liveSlots.forEach(s=>{ if(s && s.item){ map.set(s.item.course,(map.get(s.item.course)||0) + (s.item.durMin||0)); } });
   return map;
 }
 function totalCourseMin(name){
@@ -772,30 +775,50 @@ function renderCourses(){
 /* === Auto-save & Auto-load (day-aware) === */
 let _autosaveTimer=null;
 const currentISO = ()=> selectedISO();
+function rowsFromSlots(list){
+  const src = Array.isArray(list) ? list : slots;
+  return (Array.isArray(src)?src:[])
+    .filter(s=>s && s.item)
+    .map(s=>({
+      start: to24h(s.start),
+      end: to24h(s.end),
+      course:s.item.course,
+      title:s.item.title,
+      chapter:s.item.chapter||'-',
+      durMin:s.item.durMin
+    }))
+    .filter(r=>r.course);
+}
+function persistRowsForISO(iso, rows){
+  const safeIso = normalizeISO(iso||'');
+  if(!safeIso) return;
+  activeISO = safeIso;
+  if(rows && rows.length){
+    writeDayPlan(safeIso,{rows});
+  }else{
+    removeDayPlan(safeIso);
+  }
+  try{ localStorage.setItem('lastDate', safeIso); }catch(e){}
+}
+function persistCurrentDay(){
+  if(_autosaveTimer) { clearTimeout(_autosaveTimer); _autosaveTimer=null; }
+  if(!activeISO) return;
+  try{
+    const rows = rowsFromSlots();
+    persistRowsForISO(activeISO, rows);
+  }catch(e){ /* ignore */ }
+}
 function savePlanSilent(){
   try{
-    const d=currentISO();
-    const rows=(slots||[])
-      .filter(s=>s.item)
-      .map(s=>({
-        start: to24h(s.start),
-        end: to24h(s.end),
-        course:s.item.course,
-        title:s.item.title,
-        chapter:s.item.chapter||'-',
-        durMin:s.item.durMin
-      }));
-    if(rows.length){
-      writeDayPlan(d,{rows});
-    }else{
-      removeDayPlan(d);
-    }
-    localStorage.setItem('lastDate', d);
+    const iso = activeISO || currentISO();
+    const rows = rowsFromSlots();
+    persistRowsForISO(iso, rows);
   }catch(e){ /* ignore */ }
 }
 function queueAutoSave(){ if(_autosaveTimer) clearTimeout(_autosaveTimer); _autosaveTimer=setTimeout(savePlanSilent, 400); }
 function loadPlanIfAny(dateISO){
   const iso = normalizeISO(dateISO||selectedISO());
+  activeISO = iso;
   const rec = readDayPlan(iso);
   if(rec && Array.isArray(rec.rows)){
     slots=rec.rows.map(r=>({
@@ -808,6 +831,18 @@ function loadPlanIfAny(dateISO){
   }
   renderSlots();
   recalcProgress();
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('day:changed',{ detail:{ iso } }) : new Event('day:changed');
+    window.dispatchEvent(ev);
+  }catch(e){}
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('plan:loaded',{ detail:{ iso } }) : new Event('plan:loaded');
+    window.dispatchEvent(ev);
+  }catch(e){}
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('plan:saved',{ detail:{ iso, source:'load' } }) : new Event('plan:saved');
+    window.dispatchEvent(ev);
+  }catch(e){}
 }
 window.addEventListener('beforeunload', savePlanSilent);
 
@@ -912,24 +947,15 @@ function autoFillByCourse(course){
 /* ===== Save / Load / History ===== */
 function savePlan(){
   const d=selectedISO();
-  const rows=slots.filter(s=>s.item).map(s=>({
-    start: to24h(s.start),
-    end: to24h(s.end),
-    course:s.item.course,
-    title:s.item.title,
-    chapter:s.item.chapter||'-',
-    durMin:s.item.durMin
-  }));
-  if(rows.length){
-    writeDayPlan(d,{rows});
-  }else{
-    removeDayPlan(d);
-  }
+  activeISO = d;
+  const rows=rowsFromSlots();
+  persistRowsForISO(d, rows);
   alert('ثبت شد.');
-  loadHistory(); localStorage.setItem('lastDate', d); updateFaDateShow();
+  loadHistory(); updateFaDateShow();
 }
 function loadPlan(dateISO){
   const iso=normalizeISO(dateISO||selectedISO());
+  persistCurrentDay();
   localStorage.setItem('lastDate', iso);
   loadPlanIfAny(iso);
   updateFaDateShow();
@@ -1045,12 +1071,14 @@ function attach(){
 
   $('#dayDate').onchange=()=>{
     const iso=selectedISO();
+    persistCurrentDay();
     localStorage.setItem('lastDate',iso);
     updateFaDateShow();
     loadPlanIfAny(iso);
   };
   $('#prevDay').onclick=()=>{
-    const base=new Date((selectedISO())+"T00:00:00");
+    persistCurrentDay();
+    const base=new Date((activeISO||selectedISO())+"T00:00:00");
     base.setDate(base.getDate()-1);
     const iso=base.toISOString().slice(0,10);
     $('#dayDate').value=iso;
@@ -1059,7 +1087,8 @@ function attach(){
     loadPlanIfAny(iso);
   };
   $('#nextDay').onclick=()=>{
-    const base=new Date((selectedISO())+"T00:00:00");
+    persistCurrentDay();
+    const base=new Date((activeISO||selectedISO())+"T00:00:00");
     base.setDate(base.getDate()+1);
     const iso=base.toISOString().slice(0,10);
     $('#dayDate').value=iso;
@@ -1086,6 +1115,7 @@ function boot(){
   let initial=normalizeISO(last||'2025-10-19');
   if (initial < '2025-10-19') initial = '2025-10-19';
   $('#dayDate').value = initial;
+  activeISO = normalizeISO(initial);
   updateFaDateShow();
   renderHours();
   buildSlots();
@@ -1328,11 +1358,58 @@ window.addEventListener('DOMContentLoaded', ()=>{ attach();
     };
   }
 
+  function captureRows(iso){
+    const rowsFromSlots = Array.isArray(window.slots)
+      ? window.slots
+          .filter(s => s && s.item)
+          .map(s => ({
+            start: (typeof to24h === 'function') ? to24h(s.start) : (s.start || ''),
+            end:   (typeof to24h === 'function') ? to24h(s.end)   : (s.end || ''),
+            course: s.item.course,
+            title: s.item.title,
+            chapter: s.item.chapter || '-',
+            durMin: Number(s.item.durMin) || 0
+          }))
+      : [];
+    if (rowsFromSlots.length) return rowsFromSlots;
+
+    try {
+      const existing = safeParse(localStorage.getItem(dayKey(iso)));
+      if (existing && Array.isArray(existing.rows)) {
+        return existing.rows
+          .map(r => ({
+            start: r.start || '',
+            end: r.end || '',
+            course: r.course,
+            title: r.title,
+            chapter: r.chapter || '-',
+            durMin: Number(r.durMin) || 0
+          }))
+          .filter(r => r.course);
+      }
+    } catch(e){}
+
+    return [];
+  }
+
   function saveDaySafe(iso){
     const payload = buildPayload();
+    const rows = captureRows(iso);
+    if (rows.length) {
+      payload.rows = rows;
+    } else {
+      delete payload.rows;
+    }
     const s = safeStringify(payload);
     if (!s) return;
-    try { localStorage.setItem(dayKey(iso), s); window.__DIRTY = false; }
+    try {
+      if (!rows.length && (!payload.blocks || payload.blocks.length===0)) {
+        localStorage.removeItem(dayKey(iso));
+      } else {
+        localStorage.setItem(dayKey(iso), s);
+      }
+      window.__DIRTY = false;
+    }
     catch(e){ console.warn('localStorage save failed', e); /* swallow to avoid popups */ }
   }
 
