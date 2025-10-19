@@ -662,6 +662,8 @@ function plannedMap(){
   if(override==='zero'){ return new Map(); }
   const mode = (localStorage.getItem('plan:progressMode') || window.__progressMode || 'cumulative'); // 'daily' | 'cumulative'
   const map=new Map();
+  const liveSlots = Array.isArray(slots) ? slots : [];
+  const hasLiveForCurrent = liveSlots.some(s=>s && s.item);
   try{
     const curISO = typeof selectedISO==='function' ? selectedISO() : null;
     if(mode === 'cumulative'){
@@ -675,7 +677,7 @@ function plannedMap(){
         }
       });
       // Subtract saved contribution of current day to avoid double counting with live slots
-      if(curISO){
+      if(curISO && hasLiveForCurrent){
         const savedCur = (typeof readDayPlan==='function') ? readDayPlan(curISO) : null;
         if(savedCur && Array.isArray(savedCur.rows)){
           savedCur.rows.forEach(r=>{
@@ -697,7 +699,7 @@ function plannedMap(){
     }
   }catch(e){ /* ignore */ }
   // Add live (unsaved) slots for the current view so progress updates instantly
-  (typeof slots!=='undefined' && slots || []).forEach(s=>{ if(s.item){ map.set(s.item.course,(map.get(s.item.course)||0) + (s.item.durMin||0)); } });
+  liveSlots.forEach(s=>{ if(s && s.item){ map.set(s.item.course,(map.get(s.item.course)||0) + (s.item.durMin||0)); } });
   return map;
 }
 function totalCourseMin(name){
@@ -808,6 +810,18 @@ function loadPlanIfAny(dateISO){
   }
   renderSlots();
   recalcProgress();
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('day:changed',{ detail:{ iso } }) : new Event('day:changed');
+    window.dispatchEvent(ev);
+  }catch(e){}
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('plan:loaded',{ detail:{ iso } }) : new Event('plan:loaded');
+    window.dispatchEvent(ev);
+  }catch(e){}
+  try{
+    const ev = (typeof CustomEvent==='function') ? new CustomEvent('plan:saved',{ detail:{ iso, source:'load' } }) : new Event('plan:saved');
+    window.dispatchEvent(ev);
+  }catch(e){}
 }
 window.addEventListener('beforeunload', savePlanSilent);
 
