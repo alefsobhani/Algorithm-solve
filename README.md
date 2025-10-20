@@ -45,5 +45,9 @@ This repository contains a simple task management web application built with **N
 2. Set the build command to `npm run build` and the publish directory to `build`.
 3. Ensure the API endpoint URLs in the frontend point to your Heroku backend.
 
+### Rehab Manager (Visual Basic)
+A simple Visual Basic console application is available in `Rehab_Manager`.
+Compile with a VB compiler such as `vbc` and run the resulting executable.
+
 ## License
 MIT
