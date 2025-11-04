@@ -92,9 +92,11 @@ func TestCancelTripByRider(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updated, err := svc.CancelTrip(context.Background(), trip.ID, domain.StatusCancelledRider)
+	updated, err := svc.CancelTrip(context.Background(), trip.ID, domain.CancellationReasonRider)
 	require.NoError(t, err)
 	require.Equal(t, domain.StatusCancelledRider, updated.Status)
+	require.NotNil(t, updated.CancelledBy)
+	require.Equal(t, domain.CancellationReasonRider, *updated.CancelledBy)
 	require.Len(t, matcher.releases, 1)
 	require.Equal(t, driverID, matcher.releases[0])
 }

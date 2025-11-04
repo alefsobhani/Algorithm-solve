@@ -86,11 +86,11 @@ func (h *HTTP) cancelTrip(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	actor := domain.StatusCancelledRider
+	reason := domain.CancellationReasonRider
 	if r.URL.Query().Get("actor") == "driver" {
-		actor = domain.StatusCancelledDriver
+		reason = domain.CancellationReasonDriver
 	}
-	trip, err := h.svc.CancelTrip(r.Context(), id, actor)
+	trip, err := h.svc.CancelTrip(r.Context(), id, reason)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
