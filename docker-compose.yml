@@ -1,0 +1,43 @@
+version: '3.8'
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ridelite
+    ports:
+      - "5432:5432"
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+  nats:
+    image: nats:2
+    command: ["-js"]
+    ports:
+      - "4222:4222"
+  tripservice:
+    build: .
+    command: ["go", "run", "./cmd/tripservice"]
+    environment:
+      NATS_URL: nats://nats:4222
+    depends_on:
+      - db
+      - redis
+      - nats
+  locationservice:
+    build: .
+    command: ["go", "run", "./cmd/locationservice"]
+    depends_on:
+      - redis
+      - nats
+  apigateway:
+    build: .
+    command: ["go", "run", "./cmd/apigateway"]
+    environment:
+      TRIP_SERVICE_URL: http://tripservice:8080
+      ETA_SERVICE_URL: http://locationservice:8081
+    depends_on:
+      - tripservice
+      - locationservice
