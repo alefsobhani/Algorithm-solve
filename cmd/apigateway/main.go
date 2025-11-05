@@ -6,13 +6,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	ratelimitmw "github.com/example/ridellite/internal/http/middleware"
 	"github.com/example/ridellite/pkg/observability"
 )
 
@@ -33,9 +36,31 @@ func main() {
 	tripURL := getenv("TRIP_SERVICE_URL", "http://localhost:8080")
 	etaURL := getenv("ETA_SERVICE_URL", "http://localhost:8081")
 
+	redisClient := newRedisClient(ctx, logger)
+	defer func() {
+		if redisClient != nil {
+			_ = redisClient.Close()
+		}
+	}()
+
+	limiter := ratelimitmw.NewRateLimiter(redisClient, ratelimitmw.RateConfig{
+		Rate:  parseFloatEnv("RATE_READ_RPS", 50),
+		Burst: parseFloatEnv("RATE_READ_BURST", 100),
+	}, ratelimitmw.RateConfig{
+		Rate:  parseFloatEnv("RATE_WRITE_RPS", 10),
+		Burst: parseFloatEnv("RATE_WRITE_BURST", 20),
+	})
+
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
+	r.Use(chimiddleware.RequestID, chimiddleware.RealIP, chimiddleware.Logger, chimiddleware.Recoverer)
+	if limiter != nil {
+		r.Use(limiter.Middleware)
+	}
 	r.Mount("/observability", observability.MetricsRouter())
+	r.Get("/docs", swaggerHandler)
+	r.Get("/docs/", swaggerHandler)
+	r.Get("/docs/index.html", swaggerHandler)
+	r.Get("/docs/openapi.yaml", openAPIHandler)
 	r.Mount("/v1/trips", http.StripPrefix("/v1/trips", http.HandlerFunc(proxy(tripURL+"/v1/trips"))))
 	r.Handle("/v1/eta", proxy(etaURL+"/v1/eta"))
 
@@ -86,4 +111,27 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func parseFloatEnv(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
+func newRedisClient(ctx context.Context, logger *zap.Logger) *redis.Client {
+	addr := os.Getenv("REDIS_ADDR")
+	if addr == "" {
+		return nil
+	}
+	client := redis.NewClient(&redis.Options{Addr: addr})
+	if err := client.Ping(ctx).Err(); err != nil {
+		logger.Warn("redis ping failed", zap.Error(err))
+		_ = client.Close()
+		return nil
+	}
+	return client
 }

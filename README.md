@@ -44,10 +44,15 @@ RideLite یک پروژهٔ مرجع برای نمایش مهارت‌های بک
 ## اجرای سریع در حالت توسعه
 
 ```bash
+make mod
+make sqlc
+make migrate-up
 make dev
 ```
 
-این دستور سرویس‌ها را در حالت توسعه با hot reload اجرا می‌کند (air) و دیتابیس/Redis/NATS را با Docker Compose بالا می‌آورد. برای اجرای کامل، پیش‌نیازهای زیر نیاز است:
+مراحل بالا وابستگی‌های Go را همگام، کدهای sqlc را تولید، مایگریشن‌ها را اعمال و در نهایت تمام سرویس‌ها را در حالت توسعه با hot reload اجرا می‌کند. پس از بالا آمدن سرویس‌ها می‌توانید مستندات تعاملی Swagger را در آدرس [http://localhost:8088/docs](http://localhost:8088/docs) باز کنید و تمام مسیرها را مستقیماً از مرورگر فراخوانی نمایید. برای اجرای کامل، پیش‌نیازهای زیر نیاز است:
+
+دستور `make dev` اکنون از Dockerfileهای چندمرحله‌ای اختصاصی هر سرویس استفاده می‌کند؛ باینری‌ها در مرحلهٔ build با کاربر non-root کامپایل شده و لایهٔ نهایی Alpine شامل healthcheck آماده است.
 
 - Go 1.22+
 - Docker و Docker Compose
@@ -61,7 +66,6 @@ make dev
 - **Redis GEO Matching**: مختصات رانندگان در کلید `driver:locs` ذخیره و با `GEOSEARCH`، رزرو اتمیک و backoff نمایی راننده مناسب انتخاب می‌شود. مترک‌های `matching_time_seconds` و `assignment_attempts_total` رفتار سیستم را نشان می‌دهند.
 - **Outbox Dispatcher Worker**: ورکری پس‌زمینه هر ۲۰۰ms صف `outbox` را با `FOR UPDATE SKIP LOCKED` می‌خواند، رویدادها را به NATS منتشر و پس از موفقیت `published=true` می‌کند. مترک‌های `outbox_publish_total`, `outbox_fail_total`, `outbox_lag_seconds` وضعیت صف را پایش می‌کنند.
 - **Observability**: هر سرویس از zap برای لاگ ساختار‌یافته، Prometheus برای مترک‌ها و OpenTelemetry برای tracing استفاده می‌کند.
-- **تست‌ها**: واحد و اینتگریشن با Testcontainers (Redis/Postgres/NATS) سناریوهای رزرو و بازیابی Outbox را پوشش می‌دهد.
 
 ## پیکربندی محیطی کلیدی
 
