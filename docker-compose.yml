@@ -18,8 +18,9 @@ services:
     ports:
       - "4222:4222"
   tripservice:
-    build: .
-    command: ["go", "run", "./cmd/tripservice"]
+    build:
+      context: .
+      dockerfile: cmd/tripservice/Dockerfile
     environment:
       NATS_URL: nats://nats:4222
       REDIS_ADDR: redis:6379
@@ -36,17 +37,24 @@ services:
       - redis
       - nats
   locationservice:
-    build: .
-    command: ["go", "run", "./cmd/locationservice"]
+    build:
+      context: .
+      dockerfile: cmd/locationservice/Dockerfile
     depends_on:
       - redis
       - nats
   apigateway:
-    build: .
-    command: ["go", "run", "./cmd/apigateway"]
+    build:
+      context: .
+      dockerfile: cmd/apigateway/Dockerfile
     environment:
       TRIP_SERVICE_URL: http://tripservice:8080
       ETA_SERVICE_URL: http://locationservice:8081
+      REDIS_ADDR: redis:6379
+      RATE_WRITE_RPS: "10"
+      RATE_WRITE_BURST: "20"
+      RATE_READ_RPS: "50"
+      RATE_READ_BURST: "100"
     depends_on:
       - tripservice
       - locationservice
