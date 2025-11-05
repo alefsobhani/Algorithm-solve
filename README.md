@@ -66,9 +66,6 @@ make dev
 - **Redis GEO Matching**: مختصات رانندگان در کلید `driver:locs` ذخیره و با `GEOSEARCH`، رزرو اتمیک و backoff نمایی راننده مناسب انتخاب می‌شود. مترک‌های `matching_time_seconds` و `assignment_attempts_total` رفتار سیستم را نشان می‌دهند.
 - **Outbox Dispatcher Worker**: ورکری پس‌زمینه هر ۲۰۰ms صف `outbox` را با `FOR UPDATE SKIP LOCKED` می‌خواند، رویدادها را به NATS منتشر و پس از موفقیت `published=true` می‌کند. مترک‌های `outbox_publish_total`, `outbox_fail_total`, `outbox_lag_seconds` وضعیت صف را پایش می‌کنند.
 - **Observability**: هر سرویس از zap برای لاگ ساختار‌یافته، Prometheus برای مترک‌ها و OpenTelemetry برای tracing استفاده می‌کند.
-- **Rate Limiting**: Gateway با استفاده از Redis Token Bucket، درخواست‌های نوشتنی را بر اساس شناسهٔ کلاینت یا IP محدود می‌کند و با هدر `Retry-After` پاسخ می‌دهد.
-- **تست‌ها**: واحد و اینتگریشن با Testcontainers (Redis/Postgres/NATS) سناریوهای رزرو و بازیابی Outbox را پوشش می‌دهد.
-- **Swagger/OpenAPI**: فایل `api/openapi.yaml` به صورت خودکار در Gateway سرو می‌شود و UI تعاملی Swagger از مسیر `/docs` در دسترس است.
 
 ## پیکربندی محیطی کلیدی
 
@@ -84,10 +81,6 @@ make dev
 | `OUTBOX_POLL_MS` | بازهٔ اجرای worker (میلی‌ثانیه) | `200` |
 | `OUTBOX_BATCH` | حداکثر رکورد در هر batch | `100` |
 | `OUTBOX_RETRY_MAX` | سقف تلاش انتشار NATS | `5` |
-| `RATE_WRITE_RPS` | نرخ میانگین درخواست‌های نوشتنی مجاز در ثانیه | `10` |
-| `RATE_WRITE_BURST` | ظرفیت burst برای درخواست‌های نوشتنی | `20` |
-| `RATE_READ_RPS` | نرخ میانگین برای متدهای خواندنی | `50` |
-| `RATE_READ_BURST` | ظرفیت burst مسیرهای خواندنی | `100` |
 
 ## اجرای تست‌ها
 
