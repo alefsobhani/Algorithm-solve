@@ -58,14 +58,36 @@ make dev
 
 - **Idempotency Key Middleware**: تضمین می‌کند درخواست‌های ایجاد سفر یا تغییر وضعیت در حالت تکراری به نتایج قبلی پاسخ دهند.
 - **State Machine Engine**: تغییر وضعیت‌ها با optimistic locking و ثبت رویداد در جدول `trip_events` انجام می‌شود.
-- **Outbox Dispatcher**: رویدادهای دامنه‌ای در جدول `outbox` ذخیره و توسط worker به NATS منتشر می‌شوند.
+- **Redis GEO Matching**: مختصات رانندگان در کلید `driver:locs` ذخیره و با `GEOSEARCH`، رزرو اتمیک و backoff نمایی راننده مناسب انتخاب می‌شود. مترک‌های `matching_time_seconds` و `assignment_attempts_total` رفتار سیستم را نشان می‌دهند.
+- **Outbox Dispatcher Worker**: ورکری پس‌زمینه هر ۲۰۰ms صف `outbox` را با `FOR UPDATE SKIP LOCKED` می‌خواند، رویدادها را به NATS منتشر و پس از موفقیت `published=true` می‌کند. مترک‌های `outbox_publish_total`, `outbox_fail_total`, `outbox_lag_seconds` وضعیت صف را پایش می‌کنند.
 - **Observability**: هر سرویس از zap برای لاگ ساختار‌یافته، Prometheus برای مترک‌ها و OpenTelemetry برای tracing استفاده می‌کند.
-- **تست‌ها**: نمونه تست‌های واحد برای لایهٔ سرویس با استفاده از in-memory repository قرار دارد.
+- **تست‌ها**: واحد و اینتگریشن با Testcontainers (Redis/Postgres/NATS) سناریوهای رزرو و بازیابی Outbox را پوشش می‌دهد.
+
+## پیکربندی محیطی کلیدی
+
+نمونهٔ کامل متغیرها در `configs/app.example.env` قرار دارد. مهم‌ترین موارد:
+
+| متغیر | توضیح | مقدار پیش‌فرض |
+|-------|-------|---------------|
+| `REDIS_ADDR` | آدرس Redis برای GeoIndex و رزرو راننده | `redis:6379` |
+| `MATCH_RADIUS_KM` | شعاع جست‌وجو به کیلومتر | `5` |
+| `MATCH_TOPK` | سقف راننده بررسی‌شده در هر نوبت | `5` |
+| `RESERVE_TTL_SEC` | TTL رزرو راننده در Redis | `10` |
+| `MATCH_MAX_ATTEMPTS` | تعداد تلاش مجدد با backoff نمایی | `5` |
+| `OUTBOX_POLL_MS` | بازهٔ اجرای worker (میلی‌ثانیه) | `200` |
+| `OUTBOX_BATCH` | حداکثر رکورد در هر batch | `100` |
+| `OUTBOX_RETRY_MAX` | سقف تلاش انتشار NATS | `5` |
+
+## اجرای تست‌ها
+
+تست‌های واحد و اینتگریشن (نیازمند Docker برای Testcontainers):
+
+```bash
+go test ./...
+```
 
 ## مسیر توسعهٔ بعدی
 
-- پیاده‌سازی کامل الگوریتم مچینگ با Redis GeoIndex و پشتیبانی از backoff.
 - اتصال به موتور مسیریابی (OSRM/Valhalla) برای ETA دقیق.
-- اضافه کردن پوشش تست Integration با Testcontainers.
 - تکمیل داکیومنت Swagger و مثال‌های Postman.
 

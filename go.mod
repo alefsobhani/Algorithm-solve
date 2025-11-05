@@ -6,9 +6,12 @@ require (
     github.com/go-chi/chi/v5 v5.0.10
     github.com/golang-jwt/jwt/v5 v5.2.1
     github.com/google/uuid v1.5.0
+    github.com/jackc/pgx/v5 v5.5.5
     github.com/nats-io/nats.go v1.32.0
     github.com/prometheus/client_golang v1.18.0
+    github.com/redis/go-redis/v9 v9.3.0
     github.com/stretchr/testify v1.8.4
+    github.com/testcontainers/testcontainers-go v0.28.0
     go.opentelemetry.io/otel v1.24.0
     go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.24.0
     go.opentelemetry.io/otel/sdk v1.24.0
@@ -29,7 +32,6 @@ require (
     github.com/prometheus/common v0.47.0 // indirect
     github.com/prometheus/procfs v0.12.0 // indirect
     go.uber.org/multierr v1.11.0 // indirect
-    go.uber.org/zap/exp v0.0.0-20221211195306-39dcb0f80fcb // indirect
     golang.org/x/net v0.19.0 // indirect
     golang.org/x/sys v0.15.0 // indirect
     golang.org/x/text v0.14.0 // indirect
