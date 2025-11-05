@@ -36,6 +36,10 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
 	r.Mount("/observability", observability.MetricsRouter())
+	r.Get("/docs", swaggerHandler)
+	r.Get("/docs/", swaggerHandler)
+	r.Get("/docs/index.html", swaggerHandler)
+	r.Get("/docs/openapi.yaml", openAPIHandler)
 	r.Mount("/v1/trips", http.StripPrefix("/v1/trips", http.HandlerFunc(proxy(tripURL+"/v1/trips"))))
 	r.Handle("/v1/eta", proxy(etaURL+"/v1/eta"))
 

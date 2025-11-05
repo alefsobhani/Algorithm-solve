@@ -1,0 +1,355 @@
+openapi: 3.0.3
+info:
+  title: RideLite API
+  version: 1.0.0
+  description: |
+    REST API for the RideLite mobility platform exposing trip management,
+    ETA estimation and observability endpoints through the API gateway.
+servers:
+  - url: http://localhost:8088
+    description: Local development gateway
+paths:
+  /v1/trips:
+    post:
+      summary: Create a new trip request
+      description: |
+        Creates a new trip request for a rider and attempts to reserve a driver via the
+        matching engine. Idempotent when an `Idempotency-Key` header is provided.
+      operationId: createTrip
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+          description: Unique key that guarantees idempotent processing of the request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTripRequest'
+            examples:
+              standard:
+                summary: Basic request
+                value:
+                  rider_id: "11111111-1111-4111-8111-111111111111"
+                  pickup:
+                    lat: 35.741
+                    lng: 51.421
+                  dropoff:
+                    lat: 35.752
+                    lng: 51.444
+                  vehicle_type: economy
+      responses:
+        '201':
+          description: Trip created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTripResponse'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/trips/{tripId}:
+    get:
+      summary: Get trip by ID
+      description: Retrieves the current state of the trip.
+      operationId: getTrip
+      parameters:
+        - $ref: '#/components/parameters/TripID'
+      responses:
+        '200':
+          description: Trip found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '404':
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/trips/{tripId}/cancel:
+    post:
+      summary: Cancel trip
+      description: Cancels an existing trip. Use the `actor` query parameter to cancel on behalf of the driver.
+      operationId: cancelTrip
+      parameters:
+        - $ref: '#/components/parameters/TripID'
+        - in: query
+          name: actor
+          required: false
+          schema:
+            type: string
+            enum: [rider, driver]
+          description: Determines which party cancelled the trip.
+      responses:
+        '200':
+          description: Trip cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '409':
+          description: Cancellation not allowed in the current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/trips/{tripId}/start:
+    post:
+      summary: Start trip
+      description: Marks the trip as in-progress when the driver begins the ride.
+      operationId: startTrip
+      parameters:
+        - $ref: '#/components/parameters/TripID'
+      responses:
+        '200':
+          description: Trip started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '409':
+          description: Start is not valid for the current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/trips/{tripId}/complete:
+    post:
+      summary: Complete trip
+      description: Completes a trip after arrival and records the price in cents.
+      operationId: completeTrip
+      parameters:
+        - $ref: '#/components/parameters/TripID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteTripRequest'
+            examples:
+              completed:
+                value:
+                  price_cents: 82000
+      responses:
+        '200':
+          description: Trip completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trip'
+        '409':
+          description: Completion not allowed from the current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/eta:
+    get:
+      summary: Estimate ETA
+      description: Returns ETA estimations for the nearest driver and trip duration.
+      operationId: getEta
+      parameters:
+        - in: query
+          name: pickup_lat
+          required: true
+          schema:
+            type: number
+            format: float
+        - in: query
+          name: pickup_lng
+          required: true
+          schema:
+            type: number
+            format: float
+        - in: query
+          name: dropoff_lat
+          required: true
+          schema:
+            type: number
+            format: float
+        - in: query
+          name: dropoff_lng
+          required: true
+          schema:
+            type: number
+            format: float
+      responses:
+        '200':
+          description: Estimated durations in seconds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ETAResponse'
+  /observability/healthz:
+    get:
+      summary: Health probe
+      description: Lightweight health endpoint used for liveness checks.
+      operationId: healthz
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+  /observability/metrics:
+    get:
+      summary: Prometheus metrics
+      description: Exposes metrics in the Prometheus text exposition format.
+      operationId: metrics
+      responses:
+        '200':
+          description: Metrics payload
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  parameters:
+    TripID:
+      name: tripId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    GeoPoint:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          format: float
+        lng:
+          type: number
+          format: float
+    Trip:
+      type: object
+      properties:
+        ID:
+          type: string
+          format: uuid
+        RiderID:
+          type: string
+          format: uuid
+        DriverID:
+          type: string
+          format: uuid
+          nullable: true
+        Pickup:
+          $ref: '#/components/schemas/GeoPoint'
+        Dropoff:
+          $ref: '#/components/schemas/GeoPoint'
+        VehicleType:
+          type: string
+        Status:
+          type: string
+          enum:
+            - REQUESTED
+            - DRIVER_ASSIGNED
+            - DRIVER_ACCEPTED
+            - PICKUP_EN_ROUTE
+            - IN_PROGRESS
+            - COMPLETED
+            - CANCELLED_BY_RIDER
+            - CANCELLED_BY_DRIVER
+        RequestedAt:
+          type: string
+          format: date-time
+        AcceptedAt:
+          type: string
+          format: date-time
+          nullable: true
+        StartedAt:
+          type: string
+          format: date-time
+          nullable: true
+        FinishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        CancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        CancelledBy:
+          type: string
+          nullable: true
+        PriceCents:
+          type: integer
+          format: int64
+        Version:
+          type: integer
+          format: int64
+      required:
+        - ID
+        - RiderID
+        - Pickup
+        - Dropoff
+        - VehicleType
+        - Status
+        - RequestedAt
+        - PriceCents
+        - Version
+    CreateTripRequest:
+      type: object
+      required: [rider_id, pickup, dropoff]
+      properties:
+        rider_id:
+          type: string
+          format: uuid
+        pickup:
+          $ref: '#/components/schemas/GeoPoint'
+        dropoff:
+          $ref: '#/components/schemas/GeoPoint'
+        vehicle_type:
+          type: string
+    CreateTripResponse:
+      type: object
+      properties:
+        trip_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+      required: [trip_id, status]
+    CompleteTripRequest:
+      type: object
+      required: [price_cents]
+      properties:
+        price_cents:
+          type: integer
+          format: int64
+    ETAResponse:
+      type: object
+      properties:
+        driver_eta_sec:
+          type: number
+          format: float
+        trip_eta_sec:
+          type: number
+          format: float
+        driver_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+        - driver_eta_sec
+        - trip_eta_sec
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
